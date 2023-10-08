@@ -1,0 +1,424 @@
+\import Paths (pmap, inv, *>, transport, transportInv)
+\import Data.List (List, nil, ::, length)
+
+\func id (A : \Type) (a : A) => a
+
+\class Functor (F : \Set -> \Set)
+  | fmap {A B : \Set} : (A -> B) -> F A -> F B
+
+\data Maybe (A : \Type) | nothing | just A
+
+\data Empty
+\data Unit | unit
+\data Bool | false | true
+
+\func absurd {A : \Type} (x : Empty) : A
+
+\func if {A : \Type} (b : Bool) (x y : A) : A \elim b
+  | true => x
+  | false => y
+
+\func T (b : Bool) : \Type
+  | false => Empty
+  | true => Unit
+
+\data Either (A B : \Type)
+  | inl A
+  | inr B
+
+-- EXERCISE 1
+
+\func id'' {A : \Type} (a : A) => a
+
+\func idTest1 : \Pi (A : \Type \lp) A -> A => id'' (\suc \lp) (id'' (\suc \lp) (id \lp))
+\func idTest2 : \Type \lp -> \Type \lp => id'' (\suc \lp) (Maybe \lp)
+\func idTest3 : \Type (\suc \lp) => id'' (\suc (\suc \lp)) (Functor \lp)
+\func idTest4 : \Type (\suc \lp) => id'' (\suc (\suc \lp)) (Functor \lp (Maybe \lp))
+\func idTest5 (f : \Pi {A B : \Set} -> (A -> B) -> Maybe A -> Maybe B)
+  : \Type \lp => id'' (\suc \lp) (Functor \lp (Maybe \lp) f)
+
+-- EXERCISE 2
+
+\func \infix 4 < (k n : Nat) : Bool \elim n
+  | 0 => false
+  | suc n => k <= n
+
+\func \infix 4 <= (k n : Nat) : Bool \elim k
+  | 0 => true
+  | suc k => k < n
+
+\func <=-lemma (k n : Nat) (k<=n : T (k <= n)) : Either (k = n) (T (k < n)) \elim k, n, k<=n
+  | 0, 0, unit => inl idp
+  | 0, suc _, unit => inr unit
+  | suc _, 0, ()
+  | suc k, suc n, k<=n => \case <=-lemma k n k<=n \with {
+      | inl k=n => inl (pmap suc k=n)
+      | inr k<n => inr k<n
+    }
+
+\func Nat-ind
+  (E : Nat -> \Type)
+  (r : \Pi (n : Nat) -> (\Pi (k : Nat) -> T (k < n) -> E k) -> E n)
+  (n : Nat) : E n => (Nat-ind' E r n).1
+  \where
+    \func Nat-ind'
+      (E : Nat -> \Type)
+      (r : \Pi (n : Nat) -> (\Pi (k : Nat) -> T (k < n) -> E k) -> E n)
+      (n : Nat) : \Sigma (E n) (\Pi (k : Nat) -> T (k < n) -> E k) \elim n
+      | 0 => \let l0 k k<0 => absurd k<0 \in (r 0 l0, l0)
+      | suc n => \let
+        | (en, ln) => Nat-ind' E r n
+        | lsn k k<=n => \case <=-lemma k n k<=n \return E k \with {
+            | inl k=n => transportInv E k=n en
+            | inr k<n => ln k k<n
+          }
+        \in (r (suc n) lsn, lsn)
+
+\func sub (k n : Nat) (k>=n : k < n = false) : Nat
+  | k, 0, _ => k
+  | 0, suc _, ()
+  | suc k, suc n, k>=n => sub k n k>=n
+
+\func <=-refl (k : Nat) : T (k <= k) \elim k
+  | 0 => unit
+  | suc k => <=-refl k
+
+\func <=-step {k n : Nat} (k<=n : T (k <= n)) : T (k <= suc n) \elim k, n, k<=n
+  | 0, _, unit => unit
+  | suc _, 0, ()
+  | suc k, suc n, k<=n => <=-step k<=n
+
+-- k - n <= k
+\func sub-lemma1 (k n : Nat) (k>=n : k < n = false) : T (sub k n k>=n <= k)
+  | 0, 0, _ => unit
+  | 0, suc _, ()
+  | suc k, 0, _ => <=-refl k
+  | suc k, suc n, k>=n => <=-step (sub-lemma1 k n k>=n)
+
+-- k - n < k (if 0 < n)
+\func sub-lemma2 (k n : Nat) (k>=n : k < n = false) (npos : T (0 < n)) : T (sub k n k>=n < k)
+  | _, 0, _, ()
+  | 0, suc _, (), _
+  | suc k, suc n, k>=n, npos => sub-lemma1 k n k>=n
+
+\func div (k n : Nat) (npos : T (0 < n)) : Nat =>
+  Nat-ind (\lam _ => Nat)
+    (\lam k div' => \case k < n \as b, idp : k < n = b \with {
+      -- if k < n, then k / n = 0
+      | true, _ => 0
+      -- else, k / n = suc ((k - n) / n)
+      | false, k>=n => suc (div' (sub k n k>=n) (sub-lemma2 k n k>=n npos))
+    })
+    k
+
+  \where {
+    \func test1 : div 10 3 unit = 3 => idp
+    \func test2 : div 24 6 unit = 4 => idp
+  }
+
+-- EXERCISE 3
+
+\func List-ind
+  {A : \Type}
+  (E : List A -> \Type)
+  (r : \Pi (xs : List A) -> (\Pi (ys : List A) -> T (length ys < length xs) -> E ys) -> E xs)
+  (xs : List A) : E xs =>
+  (Nat-ind (\lam (n : Nat) => \Pi (zs : List A) (length zs = n) -> E zs)
+    (\lam n ln zs zs=n => r zs (\lam ys ys<zs => ln (length ys) (transport _ zs=n ys<zs) ys idp))
+    (length xs)) xs idp
+
+-- more general version
+\func size-ind
+  {A : \Type}
+  (E : A -> \Type)
+  (size : A -> Nat)
+  (r : \Pi (x : A) -> (\Pi (y : A) -> T (size y < size x) -> E y) -> E x)
+  (x : A) : E x =>
+  (Nat-ind (\lam (n : Nat) => \Pi (z : A) (size z = n) -> E z)
+    (\lam n ln z z=n => r z (\lam y y<z => ln (size y) (transport _ z=n y<z) y idp))
+    (size x)) x idp
+
+-- EXERCISE 4
+
+\func filter {A : \Type} (f : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | x :: xs => if (f x) (x :: filter f xs) (filter f xs)
+
+\data Sublist {A : \Type} (xs ys : List A) \elim xs, ys
+  | nil, nil => nilSL
+  | xs, y :: ys => stepSL (Sublist xs ys)
+  | x :: xs, y :: ys => consSL (x = y) (Sublist xs ys)
+
+\data AllSatisfy {A : \Type} (f : A -> Bool) (xs : List A) \elim xs
+  | nil => nilAll
+  | x :: xs => consAll (f x = true) (AllSatisfy f xs)
+
+\func filterSpec1 {A : \Type} (f : A -> Bool) (xs : List A) : Sublist (filter f xs) xs \elim xs
+  | nil => nilSL
+  | x :: xs => \case f x \as b \return Sublist (if b (x :: filter f xs) (filter f xs)) (x :: xs) \with {
+    | true => consSL idp (filterSpec1 f xs)
+    | false => stepSL (filterSpec1 f xs)
+  }
+
+\func filterSpec2 {A : \Type} (f : A -> Bool) (xs : List A) : AllSatisfy f (filter f xs) \elim xs
+  | nil => nilAll
+  | x :: xs => \case f x \as b, idp : f x = b \return AllSatisfy f (if b (x :: filter f xs) (filter f xs)) \with {
+    | true, fxt => consAll fxt (filterSpec2 f xs)
+    | false, _ => filterSpec2 f xs
+  }
+
+\func lemmaNilSL {A : \Type} {xs : List A} : Sublist nil xs \elim xs
+  | nil => nilSL
+  | x :: xs => stepSL lemmaNilSL
+
+\func filterSpec3
+  {A : \Type} (f : A -> Bool) (xs : List A)
+  (ys : List A) (ysSL : Sublist ys xs) (ysAll : AllSatisfy f ys) : Sublist ys (filter f xs)
+  \elim xs, ys, ysSL, ysAll
+    | _, nil, _, _ => lemmaNilSL
+    | nil, y :: ys, (), _
+    | x :: xs, y :: ys, stepSL ysSL, ysAll =>
+      \case f x \as b \return Sublist (y :: ys) (if b (x :: filter f xs) (filter f xs)) \with {
+        | true => stepSL (filterSpec3 f xs (y :: ys) ysSL ysAll)
+        | false => filterSpec3 f xs (y :: ys) ysSL ysAll
+      }
+    | x :: xs, y :: ys, consSL p ysSL, consAll fyt ysAll =>
+      \case f x \as b, idp : f x = b \return Sublist (y :: ys) (if b (x :: filter f xs) (filter f xs)) \with {
+        | true, _ => consSL p (filterSpec3 f xs ys ysSL ysAll)
+        | false, fxf => \case inv fyt *> pmap f p *> fxf : true = false \with {}
+      }
+
+-- EXERCISE 5
+
+\func sequences (xs : List Nat) : List (List Nat)
+  | nil => nil
+  | x :: xs => consHelper x (sequences xs)
+  \where {
+    \func consHelper (x : Nat) (seqs : List (List Nat)) : List (List Nat) \elim seqs
+      | nil => (x :: nil) :: nil
+      | nil :: seqs => (x :: nil) :: seqs -- impossible (see sequences-nonNil)
+      | (x' :: seq) :: seqs =>
+        if (x <= x')
+            ((x :: x' :: seq) :: seqs)
+            ((x :: nil) :: (x' :: seq) :: seqs)
+
+    \func test1
+      : sequences (2 :: 3 :: 1 :: 4 :: 5 :: 0 :: nil)
+      = (2 :: 3 :: nil) :: (1 :: 4 :: 5 :: nil) :: (0 :: nil) :: nil
+      => idp
+  }
+
+\func merge (xs ys : List Nat) : List Nat
+  | nil, nil => nil
+  | nil, y :: ys => y :: ys
+  | x :: xs, nil => x :: xs
+  | x :: xs, y :: ys =>
+    if (x <= y)
+      (x :: merge xs (y :: ys))
+      (y :: merge (x :: xs) ys)
+
+\func mergePairs (seqs : List (List Nat)) : List (List Nat)
+  | nil => nil
+  | xs :: nil => xs :: nil
+  | xs :: ys :: seqs => merge xs ys :: mergePairs seqs
+
+\func mergeAll (seqs : List (List Nat)) : List Nat
+  => helper (length seqs) seqs
+  \where {
+    -- repeatedly apply 'mergePairs' until there is only one sequence left
+    \func helper (counter : Nat) (seqs : List (List Nat)) : List Nat
+      | 0, _ => nil
+      | suc c, nil => nil
+      | suc c, xs :: nil => xs
+      | suc c, xs :: ys :: seqs => helper c (mergePairs (xs :: ys :: seqs))
+  }
+
+-- the sorting algorithm
+\func mergeSort (xs : List Nat) : List Nat
+  => mergeAll (sequences xs)
+
+\data NonNil (xs : List Nat) \with
+  | x :: xs => cons-nonNil
+
+\data Increasing (xs : List Nat) \with
+  | nil => nil-inc
+  | x :: nil => singleton-inc
+  | x1 :: x2 :: xs => cons-inc ((x1 <= x2) = true) (Increasing (x2 :: xs))
+
+\data Every {A : \Type} (P : A -> \Type) (xs : List A) \elim xs
+  | nil => nil-every
+  | x :: xs => cons-every (P x) (Every P xs)
+
+\data Combo {A : \Type} (xs ys zs : List A) \elim xs, ys, zs
+  | nil, nil, nil => nil-combo
+  | nil, ys, zs => nil-comboL (ys = zs)
+  | xs, nil, zs => nil-comboR (xs = zs)
+  | x :: xs, ys, z :: zs => cons-comboL (x = z) (Combo xs ys zs)
+  | xs, y :: ys, z :: zs => cons-comboR (y = z) (Combo xs ys zs)
+
+\data Perm {A : \Type} (xss yss : List (List A)) \elim xss, yss
+  | nil, nil => nil-perm
+  | nil :: xss, yss => nil-permL (Perm xss yss)
+  | xss, nil :: yss => nil-permR (Perm xss yss)
+  | (x :: xs) :: xss, (y :: ys) :: yss => cons-perm (x = y) (Perm (xs :: xss) (ys :: yss))
+  | xs :: xs' :: xss, ys :: yss => combo-perm (Combo xs xs' ys) (Perm xss yss)
+  | xss, yss => \infixr 9 <> {zss : List (List A)} (Perm xss zss) (Perm zss yss)
+
+\func sequences-nonNil (xs : List Nat) : Every NonNil (sequences xs)
+  | nil => nil-every
+  | x :: xs => \case sequences xs \as seqs, sequences-nonNil xs : Every NonNil seqs \return Every NonNil (sequences.consHelper x seqs) \with {
+    | nil, _ => cons-every cons-nonNil nil-every
+    | nil :: seqs, cons-every () _ -- second case is impossible
+    | (x' :: seq) :: seqs, cons-every _ seqs-nonNil =>
+      \case x <= x' \as b \return Every NonNil (if b ((x :: x' :: seq) :: seqs) ((x :: nil) :: (x' :: seq) :: seqs)) \with {
+        | true => cons-every cons-nonNil seqs-nonNil
+        | false => cons-every cons-nonNil (cons-every cons-nonNil seqs-nonNil)
+      }
+  }
+
+\func sequences-inc (xs : List Nat) : Every Increasing (sequences xs)
+  | nil => nil-every
+  | x :: xs => \case sequences xs \as seqs, sequences-nonNil xs : Every NonNil seqs, sequences-inc xs : Every Increasing seqs \return Every Increasing (sequences.consHelper x seqs) \with {
+    | nil, _, _ => cons-every singleton-inc nil-every
+    | nil :: seqs, cons-every () _, _
+    | (x' :: seq) :: seqs, _, cons-every seq-inc seqs-inc =>
+      \case x <= x' \as b, idp : (x <= x') = b \return Every Increasing (if b ((x :: x' :: seq) :: seqs) ((x :: nil) :: (x' :: seq) :: seqs)) \with {
+        | true, leq => cons-every (cons-inc leq seq-inc) seqs-inc
+        | false, _ => cons-every singleton-inc (cons-every seq-inc seqs-inc)
+      }
+  }
+
+\func merge-inc
+  {xs : List Nat} (xs-inc : Increasing xs)
+  {ys : List Nat} (ys-inc : Increasing ys)
+  : Increasing (merge xs ys) \elim xs, xs-inc, ys, ys-inc
+  | nil, _, nil, _ => nil-inc
+  | nil, _, y :: ys, ys-inc => ys-inc
+  | x :: xs, xs-inc, nil, _ => xs-inc
+  | x :: xs, xs-inc, y :: ys, ys-inc =>
+    \case x <= y \as b, idp : x <= y = b \return Increasing (if b (x :: merge xs (y :: ys)) (y :: merge (x :: xs) ys)) \with {
+      | true, leq => leftHelper xs-inc ys-inc leq
+      | false, gt => rightHelper xs-inc ys-inc (flip gt)
+    }
+  \where {
+    \func flip {x y : Nat} (gt : x <= y = false) : y <= x = true \elim x, y, gt
+      | 0, _, ()
+      | suc x, 0, _ => idp
+      | suc x, suc y, gt => flip gt
+
+    \func leftHelper
+      {x : Nat} {xs : List Nat} (xs-inc : Increasing (x :: xs))
+      {y : Nat} {ys : List Nat} (ys-inc : Increasing (y :: ys))
+      (leq : x <= y = true)
+      : Increasing (x :: merge xs (y :: ys)) \elim xs, xs-inc
+      | nil, singleton-inc => cons-inc leq ys-inc
+      | x' :: xs, cons-inc leq' xs-inc =>
+        \case x' <= y \as b, idp : x' <= y = b \return Increasing (x :: if b (x' :: merge xs (y :: ys)) (y :: merge (x' :: xs) ys)) \with {
+          | true, leq'' => cons-inc leq' (leftHelper xs-inc ys-inc leq'')
+          | false, gt => cons-inc leq (rightHelper xs-inc ys-inc (flip gt))
+        }
+
+    \func rightHelper
+      {x : Nat} {xs : List Nat} (xs-inc : Increasing (x :: xs))
+      {y : Nat} {ys : List Nat} (ys-inc : Increasing (y :: ys))
+      (leq : y <= x = true)
+      : Increasing (y :: merge (x :: xs) ys) \elim ys, ys-inc
+      | nil, singleton-inc => cons-inc leq xs-inc
+      | y' :: ys, cons-inc leq' ys-inc => 
+        \case x <= y' \as b, idp : x <= y' = b \return Increasing (y :: if b (x :: merge xs (y' :: ys)) (y' :: merge (x :: xs) ys)) \with {
+          | true, leq'' => cons-inc leq (leftHelper xs-inc ys-inc leq'')
+          | false, gt => cons-inc leq' (rightHelper xs-inc ys-inc (flip gt))
+        }
+  }
+
+\func mergePairs-inc {seqs : List (List Nat)} (inc : Every Increasing seqs) : Every Increasing (mergePairs seqs) \elim seqs, inc
+  | nil, _ => nil-every
+  | xs :: nil, cons-every xs-inc _ => cons-every xs-inc nil-every
+  | xs :: ys :: seqs, cons-every xs-inc (cons-every ys-inc inc) => cons-every (merge-inc xs-inc ys-inc) (mergePairs-inc inc)
+
+\func mergePairs-lt {seqs : List (List Nat)} {n : Nat} (lt : length seqs < n = true) : length (mergePairs seqs) < n = true \elim seqs, n, lt
+  | nil, _, lt => lt
+  | xs :: nil, _, lt => lt
+  | xs :: ys :: seqs, 0, ()
+  | xs :: ys :: seqs, suc 0, ()
+  | xs :: ys :: seqs, suc (suc n), lt => step (mergePairs-lt lt)
+  \where {
+    \func step {k n : Nat} (lt : k < n = true) : k < suc n = true \elim k, n, lt
+      | _, 0, ()
+      | 0, suc n, lt => idp
+      | suc k, suc n, lt => step lt
+  }
+
+\func mergeAll-inc {seqs : List (List Nat)} (inc : Every Increasing seqs) : Increasing (mergeAll seqs)
+  => helper (length seqs) seqs refl inc
+  \where {
+    \func helper
+      (counter : Nat) (seqs : List (List Nat)) (leq : length seqs <= counter = true)
+      (inc : Every Increasing seqs) : Increasing (mergeAll.helper counter seqs) \elim counter, seqs, inc
+      | 0, _, _ => nil-inc
+      | suc c, nil, _ => nil-inc
+      | suc c, xs :: nil, cons-every xs-inc _ => xs-inc
+      | suc c, xs :: ys :: seqs, inc =>
+        helper c (mergePairs (xs :: ys :: seqs)) (mergePairs-lt leq) (mergePairs-inc inc)
+
+    \func refl {n : Nat} : n <= n = true \elim n
+      | 0 => idp
+      | suc n => refl
+  }
+
+-- mergeSort returns an increasing list!
+\func mergeSort-inc (xs : List Nat) : Increasing (mergeSort xs)
+  => mergeAll-inc (sequences-inc xs)
+
+\func id-perm {A : \Type} {xss : List (List A)} : Perm xss xss \elim xss
+  | nil => nil-perm
+  | nil :: xss => nil-permL (nil-permR id-perm)
+  | (x :: xs) :: xss => cons-perm idp id-perm
+
+\func cons-perm' {A : \Type} {xs : List A} {xss yss : List (List A)} (p : Perm xss yss) : Perm (xs :: xss) (xs :: yss) \elim xs
+  | nil => nil-permL (nil-permR p)
+  | x :: xs => cons-perm idp (cons-perm' p)
+    
+\func sequences-perm (xs : List Nat) : Perm (xs :: nil) (sequences xs)
+  | nil => nil-permL nil-perm
+  | x :: xs => cons-perm idp (nil-permR (sequences-perm xs)) <> consHelper-perm x (sequences xs)
+  \where {
+    \func consHelper-perm (x : Nat) (seqs : List (List Nat)) : Perm ((x :: nil) :: seqs) (sequences.consHelper x seqs) \elim seqs
+      | nil => id-perm
+      | nil :: seqs => cons-perm idp (nil-permL id-perm)
+      | (x' :: seq) :: seqs => \case x <= x' \as b \return Perm ((x :: nil) :: (x' :: seq) :: seqs) (if b ((x :: x' :: seq) :: seqs) ((x :: nil) :: (x' :: seq) :: seqs)) \with {
+        | true => cons-perm idp (nil-permL (cons-perm idp id-perm))
+        | false => id-perm
+      }
+  }
+
+\func merge-combo {xs ys : List Nat} : Combo xs ys (merge xs ys) \elim xs, ys
+  | nil, nil => nil-combo
+  | nil, y :: ys => nil-comboL idp
+  | x :: xs, nil => nil-comboR idp
+  | x :: xs, y :: ys =>
+    \case x <= y \as b \return Combo (x :: xs) (y :: ys) (if b (x :: merge xs (y :: ys)) (y :: merge (x :: xs) ys)) \with {
+      | true => cons-comboL idp merge-combo
+      | false => cons-comboR idp merge-combo
+    }
+
+\func mergePairs-perm {seqs : List (List Nat)} : Perm seqs (mergePairs seqs) \elim seqs
+  | nil => nil-perm
+  | xs :: nil => id-perm
+  | xs :: ys :: seqs => combo-perm merge-combo mergePairs-perm
+
+\func mergeAll-perm {seqs : List (List Nat)} : Perm seqs (mergeAll seqs :: nil)
+  => helper (length seqs) seqs mergeAll-inc.refl
+  \where {
+    \func helper (counter : Nat) (seqs : List (List Nat)) (leq : length seqs <= counter = true) : Perm seqs (mergeAll.helper counter seqs :: nil)
+      | 0, nil, _ => nil-permR nil-perm
+      | 0, _ :: _, ()
+      | suc c, nil, _ => nil-permR nil-perm
+      | suc c, xs :: nil, _ => id-perm
+      | suc c, xs :: ys :: seqs, leq => mergePairs-perm <> helper c _ (mergePairs-lt leq)
+  }
+
+-- mergeSort returns a permutation of the original list!
+\func mergeSort-perm (xs : List Nat) : Perm (xs :: nil) (mergeSort xs :: nil)
+  => sequences-perm xs <> mergeAll-perm
+

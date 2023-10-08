@@ -1,0 +1,294 @@
+\import Paths (transport, transportInv, pmap, pmap2, *>)
+\import Data.List (List, nil, ::, length)
+\open Nat (+, *, -)
+
+\data Empty
+\data Unit | unit
+
+\func absurd {A : \Type} (x : Empty) : A
+
+\data Bool | true | false
+
+\func not (b : Bool) : Bool \elim b
+  | true => false
+  | false => true
+
+\func if {A : \Type} (b : Bool) (x y : A) : A \elim b
+  | true => x
+  | false => y
+
+\func \infix 4 <= (x y : Nat) : \Type
+  | 0, _ => Unit
+  | suc _, 0 => Empty
+  | suc x, suc y => x <= y
+
+\func <=-helper {x y : Nat} (p : x <= y) : x <= suc y \elim x, y
+  | 0, _ => unit
+  | suc _, 0 => absurd p
+  | suc _, suc _ => <=-helper p
+
+\data Decide (A : \Type)
+  | yes A
+  | no (A -> Empty)
+
+\func DecPred {A : \Type} (P : A -> \Type) => \Pi (a : A) -> Decide (P a)
+
+\func DecEq (A : \Type) => \Pi (a a' : A) -> Decide (a = a')
+
+\class Eq (A : \Type) {
+  | decideEq : DecEq A
+
+  \func \infix 4 == (a a' : A) : Bool => \case decideEq a a' \with {
+    | yes _ => true
+    | no _ => false
+  }
+}
+
+\func T (b : Bool) : \Type
+  | true => Unit
+  | false => Empty
+
+\func FromBoolToDec {A : \Type} (p : A -> Bool) : \Sigma (P : A -> \Type) (DecPred P)
+  => (\lam a => T (p a), \lam a => \case p a \as b \return Decide (T b) \with {
+    | true => yes unit
+    | false => no (\lam x => x)
+  })
+
+\func FromDecToBool {A : \Type} (P : \Sigma (P : A -> \Type) (DecPred P)) : A -> Bool
+  => \lam a => \case P.2 a \with {
+    | yes _ => true
+    | no _ => false
+  }
+
+\func \infix 4 <-> {A : \Type} (P Q : A -> \Type) => \Pi (x : A) -> \Sigma (P x -> Q x) (Q x -> P x)
+
+-- EXERCISE 1
+
+\func insertionSort (xs : List Nat) : List Nat
+  | nil => nil
+  | x :: xs => insert x (insertionSort xs)
+  \where {
+    \func insert (n : Nat) (xs : List Nat) : List Nat \elim xs
+      | nil => n :: nil
+      | x :: xs => \case x - n \with {
+          | pos _ => n :: x :: xs
+          | neg (suc _) => x :: insert n xs
+        }
+
+    \func test1 : insertionSort (4 :: 3 :: 5 :: 2 :: nil) = (2 :: 3 :: 4 :: 5 :: nil) => idp
+  }
+
+-- EXERCISE 2
+
+\func filter {A : \Type} (f : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | x :: xs => if (f x) (x :: filter f xs) (filter f xs)
+
+\func filter-lem {A : \Type} (f : A -> Bool) (xs : List A) : length (filter f xs) <= length xs \elim xs
+  | nil => unit
+  | x :: xs => \case f x \as b \return length (if b (x :: filter f xs) (filter f xs)) <= length (x :: xs) \with {
+      | true => filter-lem f xs
+      | false => <=-helper (filter-lem f xs)
+    }
+
+-- EXERCISE 3
+
+\func ex3 (f : Bool -> Bool) (x : Bool) : f (f (f x)) = f x \elim x
+  | true => \case f true \as ft, idp : f true = ft \return f (f ft) = ft \with {
+      | true, p => pmap f p *> p
+      | false, p => \case f false \as ff, idp : f false = ff \return f ff = false \with {
+          | true, q => p
+          | false, q => q
+        }
+    }
+  | false => \case f false \as ff, idp : f false = ff \return f (f ff) = ff \with {
+      | false, p => pmap f p *> p
+      | true, p => \case f true \as ft, idp : f true = ft \return f ft = true \with {
+          | false, q => p
+          | true, q => q
+        }
+    }
+
+-- EXERCISE 4
+
+\func pred (n : Nat) : Nat
+  | 0 => 0
+  | suc n => n
+
+\data \infix 4 < (n m : Nat) \with
+  | 0, suc _ => z<s
+  | suc n, suc m => s<s (n < m)
+
+\data Decide< (n m : Nat)
+  | yes< (n < m)
+  | no< (k : Nat) (n = m + k)
+
+\func decide< (n m : Nat) : Decide< n m \with
+  | n, 0 => no< n idp
+  | 0, suc _ => yes< z<s
+  | suc n, suc m => \case decide< n m \with {
+      | yes< p => yes< (s<s p)
+      | no< k p => no< k (pmap suc p)
+    }
+
+\func contra (n m k : Nat) (lt : n < m) (sum : n = m + k) : Empty \elim n, m, lt
+  | _, 0, ()
+  | 0, suc _, z<s => \case sum \with {}
+  | suc n, suc m, s<s lt => contra n m k lt (pmap pred sum)
+
+\data QuotRem (n m : Nat)
+  | quotRem (q r : Nat) (n = m * q + r) (r < m)
+
+\func getQuotRem (n m : Nat) (mpos : 0 < m) : QuotRem n m \elim n
+  | 0 => quotRem 0 0 idp mpos
+  | suc n => \case getQuotRem n m mpos \with {
+      | quotRem q r eq lt => \case decide< (suc r) m \with {
+          | yes< p => quotRem q (suc r) (pmap suc eq) p
+          | no< 0 p => quotRem (suc q) 0 (pmap suc eq *> pmap (\lam x => m * q + x) p) mpos
+          | no< (suc k) p => absurd (contra r m k lt (pmap pred p))
+        }
+    }
+
+\func div (n m : Nat) (mpos : 0 < m) : Nat
+  => \case getQuotRem n m mpos \with {
+    | quotRem q _ _ _ => q
+  }
+  \where {
+    \func test1 : div 10 3 z<s = 3 => idp
+    \func test2 : div 20 4 z<s = 5 => idp
+  }
+
+\func mod (n m : Nat) (mpos : 0 < m) : Nat
+  => \case getQuotRem n m mpos \with {
+    | quotRem _ r _ _ => r
+  }
+  \where {
+    \func test1 : mod 20 3 z<s = 2 => idp
+    \func test2 : mod 8 4 z<s = 0 => idp
+  }
+
+-- EXERCISE 5
+
+\data IsEven (n : Nat) \with
+  | 0 => even0
+  | suc (suc n) => even+2 (IsEven n)
+
+\func decideIsEven (n : Nat) : Decide (IsEven n) \with
+  | 0 => yes even0
+  | 1 => no (\lam even1 => \case even1 \with {})
+  | suc (suc n) => \case decideIsEven n \with {
+      | yes evenN => yes (even+2 evenN)
+      | no oddN => no (\lam (even+2 evenN) => oddN evenN)
+    }
+
+-- EXERCISE 6
+
+\func headEq {A : \Type} {x y : A} {xs ys : List A} (p : x :: xs = y :: ys) : x = y
+  => pmap (headDefault x) p
+  \where
+    \func headDefault {A : \Type} (dft : A) (xs : List A) : A \elim xs
+      | nil => dft
+      | x :: xs => x
+
+\func tailEq {A : \Type} {x y : A} {xs ys : List A} (p : x :: xs = y :: ys) : xs = ys
+  => pmap (tailDefault xs) p
+  \where
+    \func tailDefault {A : \Type} (dft : List A) (xs : List A) : List A \elim xs
+      | nil => dft
+      | x :: xs => xs
+
+\instance eqList {A : Eq} : Eq (List A)
+  | decideEq (xs ys : List A) : Decide (xs = ys) \elim xs, ys {
+      | nil, nil => yes idp
+      | nil, _ :: _ => no (\lam eq => \case eq \with {})
+      | _ :: _, nil => no (\lam eq => \case eq \with {})
+      | x :: xs, y :: ys => \case A.decideEq x y \with {
+          | no neqH => no (\lam eq => neqH (headEq eq))
+          | yes eqH => \case decideEq xs ys \with {
+              | no neqT => no (\lam eq => neqT (tailEq eq))
+              | yes eqT => yes (pmap2 (::) eqH eqT)
+            }
+        }
+    }
+
+-- EXERCISE 7
+
+\data Either (A : \Type) (B : \Type)
+  | inl A
+  | inr B
+
+\data Replication {A : \Type} (xs : List A) \elim xs
+  | nil => nilRepl
+  | _ :: nil => singletonRepl
+  | x1 :: x2 :: xs => consRepl (x1 = x2) (Replication (x2 :: xs))
+
+\data Distinct {A : \Type} (xs : List A) \elim xs
+  | x1 :: x2 :: xs => {
+      | startDnct (x1 = x2 -> Empty)
+      | tailDnct (Distinct (x2 :: xs))
+    }
+
+\func ex7 {A : Eq} (xs : List A) : Either (Replication xs) (Distinct xs) \elim xs
+  | nil => inl nilRepl
+  | _ :: nil => inl singletonRepl
+  | x1 :: x2 :: xs => \case decideEq x1 x2 \with {
+      | yes eq => \case ex7 (x2 :: xs) \with {
+          | inl repl => inl (consRepl eq repl)
+          | inr dnct => inr (tailDnct dnct)
+        }
+      | no neq => inr (startDnct neq)
+    }
+
+-- EXERCISE 8
+
+\func funExt {A B : \Type} {f g : A -> B} (p : \Pi (x : A) -> f x = g x) : f = g
+  => path (\lam i => \lam x => p x @ i)
+
+\func trueDecide {A : \Type} (a : A) (da : Decide A) : \Sigma (x : A) (da = yes x) \elim da
+  | yes x => (x, idp)
+  | no (na : A -> Empty) => absurd (na a)
+
+\func falseDecide {A : \Type} (na : A -> Empty) (da : Decide A) : \Sigma (x : A -> Empty) (da = no x) \elim da
+  | no x => (x, idp)
+  | yes (a : A) => absurd (na a)
+
+\func equiv1 {A : \Type} (p : A -> Bool) : FromDecToBool (FromBoolToDec p) = p
+  => funExt (\lam (x : A) => \case p x \as b, idp : p x = b \return FromDecToBool (FromBoolToDec p) x = b \with {
+    | true, eq1 : p x = true => \let
+      | P => FromBoolToDec p
+      | eq2 : P.1 x = Unit => pmap T eq1
+      | wit : P.1 x => transportInv (\lam t => t) eq2 unit
+      | eqYes : P.2 x = yes _ => (trueDecide wit (P.2 x)).2
+      \in \case P.2 x \as d, idp : d = P.2 x \return (\case d \with { | yes _ => true | no _ => false }) = true \with {
+        | yes _, _ => idp
+        | no _, eqNo => \case eqNo *> eqYes \with {}
+      }
+    | false, eq1 : p x = false => \let
+      | P => FromBoolToDec p
+      | eq2 : P.1 x = Empty => pmap T eq1
+      | not : P.1 x -> Empty => transport (\lam t => t) eq2
+      | eqNo : P.2 x = no _ => (falseDecide not (P.2 x)).2
+      \in \case P.2 x \as d, idp : d = P.2 x \return (\case d \with { | yes _ => true | no _ => false }) = false \with {
+        | yes _, eqYes => \case eqYes *> eqNo \with {}
+        | no _, _ => idp
+      }
+  })
+
+\func equiv2 {A : \Type} (P : \Sigma (P : A -> \Type) (DecPred P)) : (FromBoolToDec (FromDecToBool P)).1 <-> P.1 =>
+  \lam (x : A) => \case P.2 x \as d, idp : P.2 x = d \with {
+    | yes wit : P.1 x, eq1 : P.2 x = yes _ => \let
+      | p => FromDecToBool P
+      | eq2 : p x = true => pmap (\lam d => \case d \with { | yes _ => true | no _ => false }) eq1
+      | P' => FromBoolToDec p
+      | eq3 : P'.1 x = Unit => pmap T eq2
+      | wit' : P'.1 x => transportInv (\lam t => t) eq3 unit
+      \in (\lam _ => wit, \lam _ => wit')
+
+    | no not : P.1 x -> Empty, eq1 : P.2 x = no _ => \let
+      | p => FromDecToBool P
+      | eq2 : p x = false => pmap (\lam d => \case d \with { | yes _ => true | no _ => false }) eq1
+      | P' => FromBoolToDec p
+      | eq3 : P'.1 x = Empty => pmap T eq2
+      | not' : P'.1 x -> Empty => transport (\lam t => t) eq3
+      \in (\lam w' => absurd (not' w'), \lam w => absurd (not w))
+  }

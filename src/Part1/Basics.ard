@@ -1,0 +1,105 @@
+\import Data.Bool (Bool, true)
+\import Data.List (List, nil, ::)
+\open Nat (*, -)
+
+-- EXERCISE 1
+
+\func f1 (x y : Nat) => x
+\func f2 : Nat => 0
+\func \infix 5 f3 (f : Nat -> Nat) (z : Nat) : Int => 0
+\func f4 : Nat => 0
+\func \infix 6 f5 => f1
+\func f6 => f4
+
+\func test : Int => f1 f2 f3 f4 f5 f6
+
+-- EXERCISE 2
+
+\func if {A : \Type} (b : Bool) (x y : A) : A \elim b
+  | true => x
+  | false => y
+
+-- EXERCISE 3
+
+\func \infixr 3 || (b1 b2 : Bool) : Bool =>
+  if b1 true b2
+
+-- EXERCISE 4
+
+\func \infixr 8 ^ (x y : Nat) : Nat
+  | x, 0 => 1
+  | x, suc y => (x ^ y) * x
+
+\func fac (n : Nat) : Nat
+  | 0 => 1
+  | suc n => fac n * suc n
+
+-- EXERCISE 5
+
+\func mod (x n : Nat) : Nat => modHelp x x n
+  \where {
+    \func modHelp (counter x n : Nat) : Nat \elim counter
+      | 0 => x
+      | suc c => \case x - n \with {
+        | neg (suc _) => x
+        | pos x' => modHelp c x' n
+      }
+
+    \func test1 : mod 27 5 = 2 => idp
+    \func test2 (x : Nat) : mod 0 x = 0 => idp
+    \func test3 (x : Nat) : mod x 0 = x => test3Help x x
+
+    \func test3Help (c x : Nat) : modHelp c x 0 = x \elim c
+      | 0 => idp
+      | suc c => test3Help c x
+  }
+
+\func gcd (x y : Nat) : Nat => gcdHelp y x y
+  \where {
+    \func gcdHelp (counter x y : Nat) : Nat
+      | 0, x, _ => x
+      | _, x, 0 => x
+      | suc c, x, y => gcdHelp c y (mod x y)
+
+    \func test1 : gcd 3 105 = 3 => idp
+    \func test2 : gcd 105 3 = 3 => idp
+    \func test3 : gcd 100 1 = 1 => idp
+    \func test4 : gcd 1 100 = 1 => idp
+    \func test5 : gcd 12 28 = 4 => idp
+    \func test6 : gcd 4 0 = 4 => idp
+    \func test7 : gcd 0 4 = 4 => idp
+    \func test8 : gcd 49 91 = 7 => idp
+  }
+
+-- EXERCISE 6
+
+\func map {A B : \Type} (f : A -> B) (xs : List A) : List B \elim xs
+  | nil => nil
+  | x :: xs => f x :: map f xs
+
+-- EXERCISE 7
+
+\func transpose {A : \Type} (rows : List (List A)) : List (List A)
+  | nil => nil
+  | nil :: rows => transpose rows
+  | (x :: xs) :: rows => (x :: heads rows) :: transpose (xs :: tails rows)
+  \where {
+    \func heads {A : \Type} (rows : List (List A)) : List A
+      | nil => nil
+      | nil :: rows => heads rows
+      | (x :: _) :: rows => x :: heads rows
+
+    \func tails {A : \Type} (rows : List (List A)) : List (List A)
+      | nil => nil
+      | nil :: rows => tails rows
+      | (_ :: xs) :: rows => xs :: tails rows
+
+    \func m3x0 {A : \Type} : List (List A) => nil :: nil :: nil :: nil
+    \func m2x3 => (1 :: 2 :: 3 :: nil) :: (4 :: 5 :: 6 :: nil) :: nil
+    \func m3x2 => (1 :: 4 :: nil) :: (2 :: 5 :: nil) :: (3 :: 6 :: nil) :: nil
+
+    \func test1 {A : \Type} : transpose {A} m3x0 = nil => idp
+    \func test2 : transpose m2x3 = m3x2 => idp
+    \func test3 : transpose m3x2 = m2x3 => idp
+  }
+

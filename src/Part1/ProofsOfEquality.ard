@@ -1,0 +1,178 @@
+\import Paths (pmap, transport, transportInv)
+\import Data.Bool (Bool, if)
+\import Data.List (List, nil, ::)
+\open Nat (+)
+
+\func J
+  {A : \Type} {a : A}
+  (B : \Pi (a' : A) -> a = a' -> \Type)
+  (b : B a idp)
+  {a' : A} (p : a = a')
+  : B a' p
+  => coe (\lam i => B (p @ i) (psqueeze p i)) b right
+  \where
+    \func psqueeze  {A : \Type} {a a' : A} (p : a = a') (i : I) : a = p @ i => path (\lam j => p @ I.squeeze i j)
+
+\data Empty
+\data Unit | unit
+
+\data Vec (A : \Type) (n : Nat) \elim n
+  | zero => vnil
+  | suc n => vcons A (Vec A n)
+
+\func \infixl 4 v++ {A : \Type} {n m : Nat} (xs : Vec A n) (ys : Vec A m) : Vec A (m + n) \elim n, xs
+  | 0, vnil => ys
+  | suc n, vcons x xs => vcons x (xs v++ ys)
+
+\func lessOrEq (n m : Nat) : \Type
+  | 0, _ => Unit
+  | suc _, 0 => Empty
+  | suc n, suc m => lessOrEq n m
+
+\data LessOrEq (n m : Nat) \with
+  | 0, m => z<=n
+  | suc n, suc m => s<=s (LessOrEq n m)
+
+\data LessOrEq' (n m : Nat)
+  | z<=n' (n = 0)
+  | s<=s' {n' m' : Nat} (n = suc n') (m = suc m') (LessOrEq' n' m')
+
+\data LessOrEq'' (n m : Nat) \elim m
+  | suc m => <=-step (LessOrEq'' n m)
+  | m => <=-refl (n = m)
+
+\func LessOrEq''' (n m : Nat) => \Sigma (k : Nat) (k + n = m)
+
+\func filter {A : \Type} (f : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | x :: xs => if (f x) (x :: filter f xs) (filter f xs)
+
+-- EXERCISE 1
+
+\func Jalt
+  {A : \Type}
+  (B : \Pi (a a' : A) -> a = a' -> \Type)
+  (b : \Pi (a : A) -> B a a idp)
+  {a a' : A} (p : a = a')
+  : B a a' p
+  => J (B a) (b a) p
+
+\func J' -- cheated on this one (took definition from HoTT book)
+  {A : \Type} {a : A}
+  (B : \Pi (a' : A) -> a = a' -> \Type)
+  (b : B a idp)
+  {a' : A} (p : a = a')
+  : B a' p
+  => (Jalt
+      (\lam x x' q => \Pi (C : \Pi (z : A) -> x = z -> \Type) -> C x idp -> C x' q)
+      (\lam _ _ c => c)
+      p) B b
+
+-- EXERCISE 2
+
+\func vnil-v++ {A : \Type} {n : Nat} (vec : Vec A n) : vnil v++ vec = vec \elim n, vec
+  | 0, vnil => idp
+  | suc _, vcons _ _ => idp
+
+\func v++-vnil {A : \Type} {n : Nat} (vec : Vec A n) : vec v++ vnil = vec \elim n, vec
+  | 0, vnil => idp
+  | suc _, vcons x xs => pmap (vcons x) (v++-vnil xs)
+
+-- EXERCISE 3
+
+\func part1 {n m : Nat} (p : lessOrEq n m) : LessOrEq n m \elim n, m, p
+  | 0, _, unit => z<=n
+  | suc _, 0, ()
+  | suc _, suc _, p => s<=s (part1 p)
+
+\func part2 {n m : Nat} (p : LessOrEq n m) : LessOrEq' n m \elim n, m, p
+  | 0, _, z<=n => z<=n' idp
+  | suc _, suc _, s<=s p => s<=s' idp idp (part2 p)
+
+\func part3 {n m : Nat} (p : LessOrEq' n m) : LessOrEq'' n m \elim p
+  | z<=n' n=0 => transportInv _ n=0 lemma1
+  | s<=s' n=suc m=suc p => transportInv _ n=suc (transportInv _ m=suc (lemma2 (part3 p)))
+
+  \where {
+    \func lemma1 {m : Nat} : LessOrEq'' 0 m \elim m
+      | 0 => <=-refl idp
+      | suc m => <=-step lemma1
+
+    \func lemma2 {n m : Nat} (p : LessOrEq'' n m) : LessOrEq'' (suc n) (suc m) \elim m, p
+      | suc _, <=-step p => <=-step (lemma2 p)
+      | _, <=-refl n=m => <=-refl (pmap suc n=m)
+  }
+
+\func part4 {n m : Nat} (p : LessOrEq'' n m) : LessOrEq''' n m \elim m, p
+  | suc _, <=-step p => \case part4 p \with { | (k, sum) => (suc k, pmap suc sum) }
+  | _, <=-refl n=m => (0, n=m)
+
+\func part5 {n m : Nat} (p : LessOrEq''' n m) : lessOrEq n m \elim n, m, p
+  | 0, _, _ => unit
+  | suc _, 0, (_, ())
+  | suc n, suc m, (k, sum) => part5 (k, suc-inj sum)
+
+  \where {
+    \func pred (n : Nat) : Nat
+      | 0 => 0
+      | suc n => n
+
+    \func suc-inj {n m : Nat} (p : suc n = suc m) : n = m \elim n, m, p
+      | 0, 0, _ => idp
+      | 0, suc _, ()
+      | suc _, 0, ()
+      | suc n, suc m, p => pmap pred p
+  }
+
+-- EXERCISE 4
+
+\data In {A : \Type} (a : A) (xs : List A) \elim xs
+  | x :: xs => {
+    | isHead (a = x)
+    | inTail (In a xs)
+  }
+
+-- EXERCISE 5
+
+\data ReflTransClosure {A : \Type} (R : A -> A -> \Type) (x y : A)
+  | rtcNil (x = y)
+  | rtcCons (a : A) (R x a) (ReflTransClosure R a y)
+
+-- EXERCISE 6
+
+\func Refl {A : \Type} (R : A -> A -> \Type) : \Type
+  => \Pi (x : A) -> R x x
+
+\func Trans {A : \Type} (R : A -> A -> \Type) : \Type
+  => \Pi (x y z : A) -> R x y -> R y z -> R x z
+
+\func impl1
+  {A : \Type}
+  (R : A -> A -> \Type)
+  (x y : A) (p : R x y)
+  : ReflTransClosure R x y
+  => rtcCons y p (rtcNil idp)
+
+\func impl2
+  {A : \Type}
+  (R : A -> A -> \Type) (refl : Refl R) (trans : Trans R)
+  (x y : A) (p : ReflTransClosure R x y)
+  : R x y \elim p
+  | rtcNil x=y => transport (R x) x=y (refl x)
+  | rtcCons a rxa p => trans x a y rxa (impl2 R refl trans a y p)
+
+-- EXERCISE 7
+
+\data \infix 4 <= {A : \Type} (xs : List A) (ys : List A) \elim xs, ys
+  | nil, _ => nilSublist
+  | xs, y :: ys => leaveHead (xs <= ys)
+  | x :: xs, y :: ys => takeHead (x = y) (xs <= ys)
+
+-- EXERCISE 8
+
+\func ex7 {A : \Type} (f : A -> Bool) (xs : List A) : filter f xs <= xs \elim xs
+  | nil => nilSublist
+  | x :: xs => \case f x \as b \return if b (x :: filter f xs) (filter f xs) <= x :: xs \with {
+    | true => takeHead idp (ex7 f xs)
+    | false => leaveHead (ex7 f xs)
+  }

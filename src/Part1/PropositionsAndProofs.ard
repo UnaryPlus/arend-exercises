@@ -1,0 +1,88 @@
+\import Data.Bool (Bool, false, true, and, or)
+\open Nat (*)
+
+\func \infixr 3 && (P Q : \Type) => \Sigma P Q
+\data \infixr 2 || (P Q : \Type)
+  | inl P
+  | inr Q
+
+\data Empty
+\func Not (P : \Type) => P -> Empty
+
+-- EXERCISE 1
+
+\func ex1 {P Q R : \Type} : (P -> Q -> R) -> (P -> Q) -> P -> R =>
+  \lam pqr pq p => pqr p (pq p)
+
+-- EXERCISE 2
+
+\func ex2 {P Q R : \Type} : ((P -> Q -> R) -> P) -> (P -> R) -> R =>
+  \lam pqrp pr => pr (pqrp (\lam p _ => pr p))
+
+-- EXERCISE 3
+
+\func ex3 {P Q R : \Type} : ((P && Q) -> R) -> P -> Q -> R =>
+  \lam pqr p q => pqr (p, q)
+
+-- EXERCISE 4
+
+\func ex4 {P Q R : \Type} : (P -> Q -> R) -> (P && Q) -> R =>
+  \lam pqr (p, q) => pqr p q
+
+-- EXERCISE 5
+
+\func ex5 {P Q R : \Type} : (P -> R) -> (Q -> R) -> P || Q -> R =>
+  \lam pr qr p_q => \case p_q \with {
+    | inl p => pr p
+    | inr q => qr q
+  }
+
+-- EXERCISE 6
+
+\func ex6 {P Q : \Type} : ((P || Q) -> (P && Q)) -> ((P -> Q) && (Q -> P)) =>
+  \lam orAnd => (\lam p => (orAnd (inl p)).2, \lam q => (orAnd (inr q)).1)
+
+-- EXERCISE 7
+
+\func ex7 {P : \Type} : ((P -> Not P) && (Not P -> P)) -> Empty =>
+  \lam (p_notp, notp_p) =>
+    \let notp : Not P => \lam p => p_notp p p \in
+    notp (notp_p notp)
+
+-- EXERCISE 8
+
+\func ex8 {P : Nat -> \Type} : (\Pi (x : Nat) -> P x) -> \Sigma (x : Nat) (P x) =>
+  \lam pi => (0, pi 0)
+
+-- EXERCISE 9
+
+\func ex9 {P : Nat -> \Type} : Not (\Sigma (x : Nat) (P x)) -> Not (P 3) =>
+  \lam no_px p3 => no_px (3, p3)
+
+-- EXERCISE 10
+
+\func ex10 {P Q : Nat -> \Type} : (\Pi (x : Nat) -> P x -> Q x) -> (\Sigma (x : Nat) (P x)) -> (\Sigma (x : Nat) (Q x)) =>
+  \lam impl (x, px) => (x, impl x px)
+
+-- EXERCISE 11
+
+\func ex11 {P Q : Nat -> \Type} : (\Pi (x : Nat) -> Not (P x) || Not (Q x)) -> P 3 -> Not (Q 3) =>
+  \lam hyp p3 q3 => \case hyp 3 \with {
+    | inl notP => notP p3
+    | inr notQ => notQ q3
+  }
+
+-- EXERCISE 12
+
+\func and-assoc {x y z : Bool} : (x `and` y) `and` z = x `and` (y `and` z) \elim x
+  | false => idp
+  | true => idp
+
+\func or-assoc {x y z : Bool} : (x `or` y) `or` z = x `or` (y `or` z) \elim x
+  | false => idp
+  | true => idp
+
+-- EXERCISE 13
+
+\func ex13 : 2 * 2 = 4 => idp
+

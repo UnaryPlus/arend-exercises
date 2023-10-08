@@ -1,0 +1,170 @@
+\import Part1.Basics (gcd)
+\import Paths (pmap)
+
+\record NatPair
+  | fst : Nat
+  | snd : Nat
+
+\data Empty
+
+\data Bool | true | false
+
+\data T (b : Bool) \with
+  | true => tt
+
+\func isPos (n : Nat) : Bool
+  | 0 => false
+  | suc _ => true
+
+\record PosNat (n : Nat) (p : T (isPos n))
+
+\class Functor (F : \Type -> \Type)
+  | fmap {A B : \Type} (f : A -> B) : F A -> F B
+  | fmap-id {A : \Type} (y : F A) : fmap (\lam (x : A) => x) y = y
+  | fmap-comp {A B C : \Type} (f : A -> B) (g : B -> C) (y : F A)
+    : fmap (\lam x => g (f x)) y = fmap g (fmap f y)
+
+\data Maybe (A : \Type)
+  | nothing
+  | just A
+
+\record State (S A : \Type)
+  | state : S -> \Sigma S A
+
+\data State' (S A : \Type)
+  | state' (S -> \Sigma S A)
+
+-- EXERCISE 1
+
+\func swap (p : NatPair) : NatPair \cowith
+  | fst => p.snd
+  | snd => p.fst
+
+\func swap' (p : NatPair) : NatPair
+  | (x, y) => \new NatPair { | fst => y | snd => x }
+
+\func swap'' (p : NatPair) : NatPair
+  => \new NatPair { | fst => p.snd | snd => p.fst }
+
+-- EXERCISE 2
+
+\func swap-inv (p : NatPair) : swap (swap p) = p => idp
+\func swap'-inv (p : NatPair) : swap' (swap' p) = p => idp
+\func swap''-inv (p : NatPair) : swap'' (swap'' p) = p => idp
+
+-- EXERCISE 3
+
+\func pos0-empty (pos0 : PosNat 0) : Empty
+  => \case pos0.p \with {}
+
+\func pos1-inh : PosNat 1 \cowith
+  | p => tt
+
+-- EXERCISE 4
+
+\record Coprime (n1 n2 : Nat) (coprime : gcd n1 n2 = 1)
+
+\func Coprime60 => Coprime 60
+
+-- EXERCISE 5
+
+\class Monad \extends Functor
+  | pure {A : \Type} : A -> F A
+  | join {A : \Type} : F (F A) -> F A
+
+  | join-assoc {A : \Type} (x : F (F (F A)))
+    : join (join x) = join (fmap join x)
+  | join-pure {A : \Type} (x : F A)
+    : join (pure x) = x
+  | join-fmap-pure {A : \Type} (x : F A)
+    : join (fmap pure x) = x
+
+\instance monadMaybe : Monad Maybe
+  | fmap {A B : \Type} (f : A -> B) (x : Maybe A) : Maybe B \elim x {
+      | nothing => nothing
+      | just x => just (f x)
+    }
+  | fmap-id {A : \Type} (y : Maybe A) : fmap (\lam x => x) y = y \elim y {
+      | nothing => idp
+      | just _ => idp
+    }
+  | fmap-comp {A B C : \Type} (f : A -> B) (g : B -> C) (y : Maybe A)
+    : fmap (\lam x => g (f x)) y = fmap g (fmap f y) \elim y {
+      | nothing => idp
+      | just y => idp
+    }
+
+  | pure {A : \Type} (x : A) : Maybe A => just x
+  | join {A : \Type} (x : Maybe (Maybe A)) : Maybe A \elim x {
+      | just (just x) => just x
+      | _ => nothing
+    }
+
+  | join-assoc {A : \Type} (x : Maybe (Maybe (Maybe A))) : join (join x) = join (fmap join x) \elim x {
+      | nothing => idp
+      | just nothing => idp
+      | just (just nothing) => idp
+      | just (just (just _)) => idp
+    }
+  | join-pure {A : \Type} (x : Maybe A) : join (pure x) = x \elim x {
+      | nothing => idp
+      | just _ => idp
+    }
+  | join-fmap-pure {A : \Type} (x : Maybe A) : join (fmap pure x) = x \elim x {
+      | nothing => idp
+      | just _ => idp
+    }
+
+-- EXERCISE 6
+
+\instance monadState {S : \Type} : Monad (State S)
+  | fmap {A B : \Type} (f : A -> B) (x : State S A) : State S B \cowith {
+      | state (s : S) => \let (s', a) => x.state s \in (s', f a)
+    }
+  | fmap-id {A : \Type} (y : State S A) : fmap (\lam x => x) y = y => idp
+  | fmap-comp {A B C : \Type} (f : A -> B) (g : B -> C) (y : State S A)
+    : fmap (\lam x => g (f x)) y = fmap g (fmap f y) => idp
+
+  | pure {A : \Type} (x : A) : State S A \cowith {
+      | state (s : S) => (s, x)
+    }
+  | join {A : \Type} (x : State S (State S A)) : State S A \cowith {
+      | state (s : S) => \let (s', y : State S A) => x.state s \in y.state s'
+    }
+
+  | join-assoc {A : \Type} (x : State S (State S (State S A))) : join (join x) = join (fmap join x) => idp
+  | join-pure {A : \Type} (x : State S A) : join (pure x) = x => idp
+  | join-fmap-pure {A : \Type} (x : State S A) : join (fmap pure x) = x => idp
+
+\instance monadState' {S : \Type} : Monad (State' S)
+  | fmap {A B : \Type} (f : A -> B) (x : State' S A) : State' S B \elim x {
+      | state' update => state' (\lam (s : S) => \let (s', a) => update s \in (s', f a))
+    }
+  | fmap-id {A : \Type} (y : State' S A) : fmap (\lam x => x) y = y \elim y {
+      | state' _ => idp
+    }
+  | fmap-comp {A B C : \Type} (f : A -> B) (g : B -> C) (y : State' S A)
+    : fmap (\lam x => g (f x)) y = fmap g (fmap f y) \elim y {
+      | state' _ => idp
+    }
+
+  | pure {A : \Type} (x : A) : State' S A => state' (\lam (s : S) => (s, x))
+  | join {A : \Type} (x : State' S (State' S A)) : State' S A \elim x {
+      | state' update => state' (\lam (s : S) => \let (s', state' update') => update s \in update' s')
+    }
+
+  | join-assoc {A : \Type} (x : State' S (State' S (State' S A))) : join (join x) = join (fmap join x) \elim x {
+      | state' update => pmap state' (funExt \lam (s : S) => \case update s {- epic line of code -} \as pair \return (\case \case pair \return _ \with { | (s', state' update') => update' s' } \with { | (s', state' update') => update' s' }) = (\case \let (s', a) => pair \in (s', join a) \with { | (s', state' update') => update' s' }) \with {
+        | (_, state' _) => idp
+      })
+    }
+  | join-pure {A : \Type} (x : State' S A) : join (pure x) = x \elim x {
+      | state' _ => idp
+    }
+  | join-fmap-pure {A : \Type} (x : State' S A) : join (fmap pure x) = x \elim x {
+      | state' _ => idp
+    }
+
+  \where
+    \func funExt {A B : \Type} {f g : A -> B} (p : \Pi (x : A) -> f x = g x) : f = g
+      => path (\lam i => \lam x => p x @ i)

@@ -1,0 +1,155 @@
+\import Function (id)
+\import Paths (transport)
+\import Data.Bool (Bool, false, true, not)
+\import Data.List (List, nil, ::)
+\open Nat (+, *)
+
+\data Empty
+\data Unit | unit
+
+\func inv {A : \Type} {a a' : A} (p : a = a') : a' = a
+  => transport (\lam x => x = a) p idp
+
+\func trans {A : \Type} {a a' a'' : A} (p : a = a') (q : a' = a'') : a = a''
+  => transport (\lam x => a = x) q p
+
+\func pmap {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a'
+  => transport (\lam x => f a = f x) p idp
+
+\func Nat-elim (P : Nat -> \Type)
+               (z : P zero)
+               (s : \Pi (n : Nat) -> P n -> P (suc n))
+               (x : Nat) : P x \elim x
+  | zero => z
+  | suc n => s n (Nat-elim P z s n)
+
+\func Nat-rec (P : \Type)
+              (z : P)
+              (s : Nat -> P -> P)
+              (x : Nat) : P \elim x
+  | zero => z
+  | suc n => s n (Nat-rec P z s n)
+
+-- EXERCISE 1
+
+\func pmap2 {A B C : \Type} (f : A -> B -> C) {a a' : A} (pA : a = a') {b b' : B} (pB : b = b') : f a b = f a' b'
+  => pmap (f a) pB `trans` pmap (\lam x => f x b') pA
+
+-- EXERCISE 2
+
+\func repl {A B : \Type} (p : A = B) : A -> B
+  => transport id p
+
+\func transport' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') : B a -> B a'
+  => repl (pmap B p)
+
+-- EXERCISE 3
+
+\func ex3 : left = right
+  => path id
+
+-- EXERCISE 4
+
+\func ex4 {A B : \Type} {a a' : A} (pA : a = a') {b b' : B} (pB : b = b') : (a, b) = (a', b')
+  => path (\lam i => (pA @ i, pB @ i))
+
+-- EXERCISE 5
+
+\func ex5 {A : \Type} {B : A -> \Type} {t t' : \Sigma (x : A) (B x)} (p : t = t') : t.1 = t'.1
+  => path (\lam i => (p @ i).1)
+
+-- EXERCISE 6
+
+\func ex6 : (\lam x => not (not x)) = (\lam x => x)
+  => path (\lam i => \lam x => not-inv x @ i)
+  \where
+    \func not-inv (x : Bool) : not (not x) = x \elim x
+      | false => idp
+      | true => idp
+
+-- EXERCISE 7
+
+\func fac : Nat -> Nat
+  => Nat-rec Nat 1 (\lam n r => suc n * r)
+  \where {
+    \func test1 : fac 0 = 1 => idp
+    \func test2 : fac 5 = 120 => idp
+  }
+
+-- EXERCISE 8
+
+\func +-assoc' (k m n : Nat) : (k + m) + n = k + (m + n)
+  => Nat-elim _ idp (\lam _ => pmap suc) k
+
+-- EXERCISE 9
+
+\data D | con1 Nat | con2 D D | con3 (Nat -> D)
+
+\func D-elim (P : D -> \Type)
+             (c1 : \Pi (n : Nat) -> P (con1 n))
+             (c2 : \Pi (d1 d2 : D) -> P d1 -> P d2 -> P (con2 d1 d2))
+             (c3 : \Pi (f : Nat -> D) -> (\Pi (n : Nat) -> P (f n)) -> P (con3 f))
+             (x : D) : P x \elim x
+  | con1 n => c1 n
+  | con2 d1 d2 => c2 d1 d2 (D-elim P c1 c2 c3 d1) (D-elim P c1 c2 c3 d2)
+  | con3 f => c3 f (\lam n => D-elim P c1 c2 c3 (f n))
+
+\func D-rec (P : \Type)
+            (c1 : \Pi (n : Nat) -> P)
+            (c2 : \Pi (d1 d2 : D) -> P -> P -> P)
+            (c3 : \Pi (f : Nat -> D) -> (\Pi (n : Nat) -> P) -> P)
+            (x : D) : P \elim x
+  | con1 n => c1 n
+  | con2 d1 d2 => c2 d1 d2 (D-rec P c1 c2 c3 d1) (D-rec P c1 c2 c3 d2)
+  | con3 f => c3 f (\lam n => D-rec P c1 c2 c3 (f n))
+
+-- EXERCISE 10
+
+\func List-elim {A : \Type}
+                (P : List A -> \Type)
+                (pnil : P nil)
+                (pcons : \Pi (x : A) (xs : List A) -> P xs -> P (x :: xs))
+                (xs : List A) : P xs \elim xs
+  | nil => pnil
+  | x :: xs => pcons x xs (List-elim P pnil pcons xs)
+
+\func List-rec {A : \Type}
+               (P : \Type)
+               (pnil : P)
+               (pcons : \Pi (x : A) (xs : List A) -> P -> P)
+               (xs : List A) : P \elim xs
+  | nil => pnil
+  | x :: xs => pcons x xs (List-rec P pnil pcons xs)
+
+-- EXERCISE 11
+
+\func coe0 (B : I -> \Type) (b : B left) : B right
+  => transport B (path id) b
+
+\func transport'' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a'
+  => coe0 (\lam i => B (p @ i)) b
+
+-- EXERCISE 12
+
+\func coe0Inv (B : I -> \Type) (b : B right) : B left
+  => transport B (inv (path id)) b
+
+-- EXERCISE 13
+
+\func ex13 (x : Nat) (p : 0 = suc x) : Empty
+  => transport isZero p unit
+  \where {
+    \func isZero (x : Nat) : \Type
+      | 0 => Unit
+      | suc _ => Empty
+  }
+
+-- EXERCISE 14
+
+\func ex14 (p : fac = suc) : Empty
+  => transport isOne (pmap (\lam f => f 1) p) unit
+  \where {
+    \func isOne (x : Nat) : \Type
+      | 1 => Unit
+      | _ => Empty
+  }

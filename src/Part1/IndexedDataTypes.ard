@@ -1,0 +1,147 @@
+\import Data.Bool (Bool, false, true, if)
+\import Data.List (List, nil, ::, length)
+\open Nat (+, *, -)
+
+\data Empty
+\data Unit | unit
+
+\func T (b : Bool) : \Type
+  | false => Empty
+  | true => Unit
+
+\func \infix 4 < (x y : Nat) : Bool
+  | _, 0 => false
+  | 0, suc _ => true
+  | suc x, suc y => x < y
+
+\func \infix 4 == (x y : Nat) : Bool =>
+  \case x - y \with {
+    | pos zero => true
+    | pos (suc _) => false
+    | neg (suc _) => false
+  }
+
+\func max (x y : Nat) : Nat =>
+  \case x - y \with {
+    | pos _ => x
+    | neg (suc _) => y
+  }
+
+\func vec (A : \Type) (n : Nat) : \Type \elim n
+  | 0 => Unit
+  | suc n => \Sigma A (vec A n)
+
+\data Vec (A : \Type) (n : Nat) \elim n
+  | 0 => vnil
+  | suc n => vcons A (Vec A n)
+
+-- EXERCISE 1
+
+\func lookup {A : \Type} (xs : List A) (n : Nat) (small : T (n < length xs)) : A
+  | nil, 0, ()
+  | nil, suc _, ()
+  | x :: _, 0, unit => x
+  | _ :: xs, suc n, small => lookup xs n small
+
+-- EXERCISE 2
+
+\func replicate_vec {A : \Type} (x : A) (n : Nat) : vec A n
+  | _, 0 => unit
+  | x, suc n => (x, replicate_vec x n)
+
+\func replicate {A : \Type} (x : A) (n : Nat) : Vec A n
+  | _, 0 => vnil
+  | x, suc n => vcons x (replicate x n)
+
+-- EXERCISE 3
+
+\func map_vec {A B : \Type} {n : Nat} (f : A -> B) (v : vec A n) : vec B n \elim n, f, v
+  | 0, _, unit => unit
+  | suc _, f, (x, xs) => (f x, map_vec f xs)
+
+\func map {A B : \Type} {n : Nat} (f : A -> B) (v : Vec A n) : Vec B n \elim n, f, v
+  | 0, _, vnil => vnil
+  | suc _, f, vcons x xs => vcons (f x) (map f xs)
+
+-- EXERCISE 4
+
+\func zipWith_vec {A B C : \Type} {n : Nat} (f : A -> B -> C) (vA : vec A n) (vB : vec B n) : vec C n \elim n, f, vA, vB
+  | 0, _, unit, unit => unit
+  | suc _, f, (x, xs), (y, ys) => (f x y, zipWith_vec f xs ys)
+
+\func zipWith {A B C : \Type} {n : Nat} (f : A -> B -> C) (vA : Vec A n) (vB : Vec B n) : Vec C n \elim n, f, vA, vB
+  | 0, _, vnil, vnil => vnil
+  | suc _, f, vcons x xs, vcons y ys => vcons (f x y) (zipWith f xs ys)
+
+-- EXERCISE 5
+
+\func generate {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n \elim n, f
+  | 0, _ => vnil
+  | suc _, f => vcons (f 0) (generate \lam k => f (suc k))
+
+-- EXERCISE 6
+
+\func Matrix (m n : Nat) : \Type =>
+  Vec (Vec Nat n) m
+
+\func headCol {m n : Nat} (matrix : Matrix m (suc n)) : Vec Nat m =>
+  map (\lam (vcons x _) => x) matrix
+
+\func tailCols {m n : Nat} (matrix : Matrix m (suc n)) : Matrix m n =>
+  map (\lam (vcons _ xs) => xs) matrix
+
+\func mI (n : Nat) : Matrix n n =>
+  generate (\lam i => generate \lam j => if (i == j) 1 0)
+
+\func m2x2 (a b c d : Nat) : Matrix 2 2 =>
+  vcons (vcons a (vcons b vnil)) (vcons (vcons c (vcons d vnil)) vnil)
+
+\func transpose {m n : Nat} (matrix : Matrix m n) : Matrix n m \elim n, matrix
+  | 0, _ => vnil
+  | suc _, matrix => vcons (headCol matrix) (transpose (tailCols matrix))
+
+\func add {m n : Nat} (m1 : Matrix m n) (m2 : Matrix m n) : Matrix m n =>
+  zipWith (zipWith (+)) m1 m2
+
+\func mul {k m n : Nat} (m1 : Matrix k m) (m2 : Matrix m n) : Matrix k n \elim k, m1, m2
+  | 0, vnil, _ => vnil
+  | suc _, vcons row rows, m2 => vcons (mulRow row m2) (mul rows m2)
+  \where {
+    \func mulRow {m n : Nat} (row : Vec Nat m) (matrix : Matrix m n) : Vec Nat n \elim n, row, matrix
+      | 0, _, matrix => vnil
+      | suc _, row, matrix => vcons (dot row (headCol matrix)) (mulRow row (tailCols matrix))
+
+    \func dot {n : Nat} (v1 : Vec Nat n) (v2 : Vec Nat n) : Nat =>
+      sum (zipWith (*) v1 v2)
+
+    \func sum {n : Nat} (v : Vec Nat n) : Nat \elim n, v
+      | 0, vnil => 0
+      | suc _, vcons x xs => x + sum xs
+
+    \func matrix1 => m2x2 2 3 1 4
+    \func matrix2 => m2x2 5 0 1 3
+    \func matrix3 => m2x2 13 9 9 12
+
+    \func test1 : mul (mI 3) (mI 3) = mI 3 => idp
+    \func test2 : mul matrix1 matrix2 = matrix3 => idp
+  }
+
+-- EXERCISE 7
+
+\data CTree (A : \Type) (n : Nat) \elim n
+  | 0 => leafC
+  | suc n => branchC A (CTree A n) (CTree A n)
+
+-- EXERCISE 8
+
+\data Tree (A : \Type) (n : Nat) \elim n
+  | _ => leaf
+  | suc n => branch A (Tree A n) (Tree A n)
+
+\func height {A : \Type} {n : Nat} (tree : Tree A n) : Nat \elim n, tree
+  | 0, leaf => 0
+  | suc _, leaf => 0
+  | suc _, branch _ t1 t2 => 1 + max (height t1) (height t2)
+
+
+
