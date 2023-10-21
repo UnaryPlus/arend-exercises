@@ -1,0 +1,195 @@
+\import Paths (*>, Jl, pmap, propPath, transport, inv, transportInv)
+\import Part1.CaseExpression (Empty, absurd)
+\import Part2.PropositionsAndSets (isSet, funExt, unFunExt)
+\open Nat (+)
+
+\data Bool | true | false
+
+\func not (x : Bool) : Bool \elim x
+  | true => false
+  | false => true
+
+\truncated \data Trunc (A : \Type) : \Prop
+  | trunc A
+
+\truncated \data \fixr 2 Or (A B : \Type) : \Prop
+  | inl A
+  | inr B
+
+\func Or-rec {A B C : \Prop} (f : A -> C) (g : B -> C) (p : A `Or` B) : C \elim p
+  | inl a => f a
+  | inr b => g b
+
+\func exists (A : \Type) (B : A -> \Prop) => Trunc (\Sigma (x : A) (B x))
+
+\func \fixr 9 o {A B C : \Type} (g : B -> C) (f : A -> B) (a : A) => g (f a)
+
+\func isCogenerator (C : \Type) => \Pi {A B : \Set} (f g : A -> B) (p : \Pi (h : B -> C) -> h `o` f = h `o` g) -> f = g
+
+\func Equiv (A B : \Type) => \Sigma (f : A -> B)
+                                    (g : B -> A)
+                                    (\Pi (x : A) -> g (f x) = x)
+                                    (\Pi (y : B) -> f (g y) = y)
+
+\func equality=>equivalence {A B : \Type} (p : A = B) : Equiv A B =>
+  transport (Equiv A) p (\lam x => x, \lam x => x, \lam x => idp, \lam x => idp)
+
+\func equivalence=>equality {A B : \Type} (e : Equiv A B) : A = B =>
+  path (iso e.1 e.2 e.3 e.4)
+
+\func UA {A B : \Set} : Equiv (A = B) (Equiv A B) => (equality=>equivalence, equivalence=>equality, LRL, RLR)
+  \where {
+    \func LRL {A B : \Set} (p : A = B) : equivalence=>equality (equality=>equivalence p) = p => {?}
+    \func RLR {A B : \Set} (e : Equiv A B) : equality=>equivalence (equivalence=>equality e) = e => {?}
+  }
+
+-- EXERCISE 1
+
+\data Dec (A : \Prop)
+  | yes A
+  | no (A -> Empty)
+  \where {
+    \use \level levelProp {A : \Prop} (d1 d2 : Dec A) : d1 = d2 \elim d1, d2
+      | yes x, yes y => pmap yes propPath
+      | no x, no y => pmap no propPath
+      | yes x, no y => absurd (y x)
+      | no x, yes y => absurd (x y)
+  }
+
+-- EXERCISE 2
+
+\func fromTrunc {A : \Prop} (t : Trunc A) : A \elim t
+  | trunc a => a
+
+\func truncIso {A : \Prop} : Trunc A = A
+  => path (iso fromTrunc trunc (\lam (trunc a) => idp) (\lam a => idp))
+
+-- EXERCISE 3
+
+\func deMorgan1 {A B C : \Prop} (p : \Sigma A (B `Or` C)) : (\Sigma A B) `Or` (\Sigma A C) \elim p
+  | (a, inl b) => inl (a, b)
+  | (a, inr c) => inr (a, c)
+
+\func deMorgan2 {A B C : \Prop} (p : (\Sigma A B) `Or` (\Sigma A C)) : \Sigma A (B `Or` C) \elim p
+  | inl (a, b) => (a, inl b)
+  | inr (a, c) => (a, inr c)
+
+\func deMorganIso1 {A B C : \Prop} (p : \Sigma A (B `Or` C)) : deMorgan2 (deMorgan1 p) = p \elim p
+  | (a, inl b) => idp
+  | (a, inr c) => idp
+
+\func deMorganIso2 {A B C : \Prop} (p : (\Sigma A B) `Or` (\Sigma A C)) : deMorgan1 (deMorgan2 p) = p \elim p
+  | inl (a, b) => idp
+  | inr (a, c) => idp
+
+\func deMorganIso {A B C : \Prop} : (\Sigma A (B `Or` C)) = ((\Sigma A B) `Or` (\Sigma A C))
+  => path (iso deMorgan1 deMorgan2 deMorganIso1 deMorganIso2)
+
+-- EXERCISE 4
+
+\func Or-elim {A B : \Prop} (C : Or A B -> \Prop)
+              (f : \Pi (x : A) -> C (inl x)) (g : \Pi (y : B) -> C (inr y))
+              (p : A `Or` B) : C p =>
+  Or-rec (\lam x => transport C propPath (f x)) (\lam y => transport C propPath (g y)) p
+
+-- EXERCISE 5
+
+\func Prop-isCogenerator : isCogenerator \Prop
+  => \lam {A B : \Set} f g p => funExt \lam x => \let
+  | test : (f x = f x) = (f x = g x) => unFunExt (p (\lam b => f x = b)) x
+  \in transport (\lam T => T) test idp
+
+-- EXERCISE 6
+
+\func equa=>equi-inj {A B : \Set} (p1 p2 : A = B) (q : equality=>equivalence p1 = equality=>equivalence p2) : p1 = p2
+  => inv (UA.LRL p1) *> pmap equivalence=>equality q *> UA.LRL p2
+
+\func equivPath {A B : \Prop} (e1 e2 : Equiv A B) : e1 = e2
+  => \let
+    | p1 : e1.1 = e2.1 => funExt (\lam x => propPath {B})
+    | p2 : e1.2 = e2.2 => funExt (\lam y => propPath {A})
+    \in helper p1 p2 e1.3 e2.3 e1.4 e2.4
+  \where {
+    \func helper
+      {A B : \Set} {f f' : A -> B} (p1 : f = f') {g g' : B -> A} (p2 : g = g')
+      (p : \Pi (x : A) -> g (f x) = x) (p' : \Pi (x : A) -> g' (f' x) = x)
+      (q : \Pi (y : B) -> f (g y) = y) (q' : \Pi (y : B) -> f' (g' y) = y)
+      : (f, g, p, q) = {Equiv A B} (f', g', p', q') \elim p1, p2
+      | idp, idp => \let
+        | p3 : p = p' => funExt (\lam x => propPath {g (f x) = x})
+        | p4 : q = q' => funExt (\lam y => propPath {f (g y) = y})
+        \in path (\lam i => (f, g, p3 @ i, p4 @ i))
+  }
+
+\func Prop-isSet : isSet \Prop
+  => \lam A B p1 p2 => \let
+    | e1 : Equiv A B => equality=>equivalence p1
+    | e2 : Equiv A B => equality=>equivalence p2
+    \in equa=>equi-inj p1 p2 (equivPath e1 e2)
+
+-- EXERCISE 7
+
+\func notPath : Bool = Bool
+  => equivalence=>equality (not, not, not-inv, not-inv)
+  \where {
+    \func not-inv (x : Bool) : not (not x) = x \elim x
+      | true => idp
+      | false => idp
+  }
+
+\func notPathLemma : (equality=>equivalence notPath).1 true = false
+  => pmap (\lam e => e.1 true) (UA.RLR (not, not, notPath.not-inv, notPath.not-inv))
+
+\func equivLemma1 (e : Equiv Bool Bool) (p : e.1 false = e.1 true) : Empty
+  => \case inv (e.3 false) *> pmap e.2 p *> e.3 true \with {}
+
+\func boolLemma (x y : Bool) (p : x = y -> Empty) : x = not y \elim x, y
+  | true, true => absurd (p idp)
+  | false, false => absurd (p idp)
+  | true, false => idp
+  | false, true => idp
+
+\func equivLemma2 (e : Equiv Bool Bool) : e.1 false = not (e.1 true)
+  => boolLemma (e.1 false) (e.1 true) (equivLemma1 e)
+
+\func equivLemma3 (e1 e2 : Equiv Bool Bool) (p : e1.1 true = e2.1 true) : e1 = e2 => \let
+  | p1 : e1.1 = e2.1 => funExt (\lam x => \case \elim x \with {
+      | true => p
+      | false => equivLemma2 e1 *> pmap not p *> inv (equivLemma2 e2)
+    })
+  | p2 : e1.2 = e2.2 => funExt (\lam x => \let
+      | test1 : e1.1 (e2.2 x) = x => unFunExt p1 (e2.2 x) *> e2.4 x
+      | test2 : e1.1 (e1.2 x) = e1.1 (e2.2 x) => e1.4 x *> inv test1
+      \in inv (e1.3 (e1.2 x)) *> pmap e1.2 test2 *> e1.3 (e2.2 x)
+    )
+  \in equivPath.helper p1 p2 e1.3 e2.3 e1.4 e2.4
+
+\func ex7 : (Bool = Bool) = Bool
+  => equivalence=>equality (map1, map2, inv1, inv2)
+  \where {
+    \func map1 (p : Bool = Bool) : Bool => (equality=>equivalence p).1 true
+
+    \func map2 (x : Bool) : Bool = Bool \elim x
+      | true => idp
+      | false => notPath
+
+    \func inv1 (p : Bool = Bool) : map2 (map1 p) = p
+      => \case map1 p \as x, idp : x = map1 p \return map2 x = p \with {
+        | true, eq => \let
+          | e1 => equality=>equivalence idp
+          | e2 => equality=>equivalence p
+          \in equa=>equi-inj idp p (equivLemma3 e1 e2 eq)
+        | false, eq => \let
+          | e1 : Equiv Bool Bool => equality=>equivalence notPath
+          | e2 : Equiv Bool Bool => equality=>equivalence p
+          \in equa=>equi-inj notPath p (equivLemma3 e1 e2 (notPathLemma *> eq))
+      }
+
+    \func inv2 (x : Bool) : map1 (map2 x) = x \elim x
+      | true => idp
+      | false => notPathLemma
+  }
+
+-- EXERCISE 8 (unfinished)
+
+-- EXERCISE 9 (unfinished)

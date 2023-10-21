@@ -1,0 +1,166 @@
+\import Algebra.Group (Group)
+\import Algebra.Monoid (*)
+\import Paths (*>, inv, psqueeze, *>-assoc, *>_inv, ==<, >==, idp_*>, inv_*>, pmap, pmap_*>-comm, pmap_inv-comm, qed)
+\import Meta (cases, mcases)
+
+\data Empty
+
+\data Circle
+  | base
+  | loop I \with {
+    | left => base
+    | right => base
+  }
+
+\data Susp (A : \Type)
+  | south
+  | north
+  | merid A (i : I) \elim i {
+    | left => north
+    | right => south
+  }
+
+\func Sphere (n : Nat) : \Type \lp \oo
+  | 0 => Susp Empty
+  | suc n => Susp (Sphere n)
+
+\func CircleToSphere1 (x : Circle) : Sphere 1
+  | base => north
+  | loop i => (path (merid north) *> inv (path (merid south))) @ i
+
+\func Sphere1ToCircle (x : Sphere 1) : Circle
+  | south => base
+  | north => base
+  | merid north i => loop i
+  | merid south i => base
+  | merid (merid () _) _
+
+\data Torus
+  | point
+  | line1 I \with { left => point | right => point }
+  | line2 I \with { left => point | right => point }
+  | face I I \with {
+    | left, i => line2 i
+    | right, i => line2 i
+    | i, left => line1 i
+    | i, right => line1 i
+  }
+
+\truncated \data TruncP (A : \Type) : \Prop
+  | trunc A
+
+\func isConnected (X : \Type) => \Pi (x y : X) -> TruncP (x = y)
+
+\data K1 (G : Group)
+  | base
+  | loop G (i : I) \elim i {
+    | left => base
+    | right => base
+  }
+  | relation (g g' : G) (i : I) (j : I) \elim i, j {
+    | left, j => base
+    | right, j => loop g' j
+    | i, left => loop g i
+    | i, right => loop (g * g') i
+  }
+
+-- EXERCISE 1
+
+\func psqueezeR {A : \Type} {a a' : A} (p : a = a') (i : I) : p @ i = a' =>
+  path (\lam j => p @ I.squeezeR i j)
+
+\func Circle=Sphere1 : Circle = Sphere 1 =>
+  path (iso CircleToSphere1 Sphere1ToCircle CSC SCS)
+  \where {
+    \func CSC (x : Circle) : Sphere1ToCircle (CircleToSphere1 x) = x
+      | base => idp
+      | loop i => pmap (__ @ i) helper
+
+    \func helper : pmap Sphere1ToCircle (path (merid north) *> inv (path (merid south))) = path loop =>
+      pmap_*>-comm Sphere1ToCircle (path (merid north)) (inv (path (merid south)))
+        *> pmap (path loop *>) (pmap_inv-comm Sphere1ToCircle (path (merid south)))
+
+    \func SCS (x : Sphere 1) : CircleToSphere1 (Sphere1ToCircle x) = x
+      | south => path (merid south)
+      | north => idp
+      | merid north i => path (\lam j => (path (merid north) *> inv (psqueezeR (path (merid south)) j)) @ i)
+      | merid south i => psqueeze (path (merid south)) i
+      | merid (merid () _) _
+  }
+
+-- EXERCISE 2
+
+\func Circle2ToTorus (x : \Sigma Circle Circle) : Torus
+  | (base, base) => point
+  | (loop i, base) => line1 i
+  | (base, loop i) => line2 i
+  | (loop i, loop j) => face i j
+
+\func TorusToCircle2 (x : Torus) : \Sigma Circle Circle
+  | point => (base, base)
+  | line1 i => (loop i, base)
+  | line2 i => (base, loop i)
+  | face i j => (loop i, loop j)
+
+\func Circle2=Torus : (\Sigma Circle Circle) = Torus =>
+  path (iso Circle2ToTorus TorusToCircle2 CTC TCT)
+  \where {
+    \func CTC (x : \Sigma Circle Circle) : TorusToCircle2 (Circle2ToTorus x) = x =>
+      mcases {Circle2ToTorus} x idp
+
+    \func TCT (x : Torus) : Circle2ToTorus (TorusToCircle2 x) = x =>
+      cases x idp
+  }
+
+-- EXERCISE 3
+
+\record Isomorphism {X : \1-Type} (x y : X)
+  | map1 : x = x -> y = y
+  | map2 : y = y -> x = x
+  | inv1 (p : x = x) : map2 (map1 p) = p
+  | inv2 (p : y = y) : map1 (map2 p) = p
+  | homo (p1 p2 : x = x) : map1 p1 *> map1 p2 = map1 (p1 *> p2)
+
+\func Isomorphic {X : \1-Type} (x y : X) => TruncP (Isomorphism x y)
+
+\func ex3 {X : \1-Type} (con : isConnected X) (x y : X) : Isomorphic x y =>
+  \case con x y \with {
+    | trunc c => trunc (\new Isomorphism {
+      | map1 p => inv c *> p *> c
+      | map2 p => c *> p *> inv c
+
+      | inv1 p =>
+        c *> (inv c *> p *> c) *> inv c  ==< pmap (c *>) (*>-assoc (inv c) (p *> c) (inv c)) >==
+        c *> inv c *> (p *> c) *> inv c  ==< pmap (c *> inv c *> __) (*>-assoc p c (inv c)) >==
+        c *> inv c *> p *> c *> inv c    ==< pmap (c *> inv c *> p *> __) (*>_inv c) >==
+        c *> inv c *> p                  ==< inv (*>-assoc c (inv c) p) >==
+        (c *> inv c) *> p                ==< pmap (`*> p) (*>_inv c) >==
+        idp *> p                         ==< idp_*> p >==
+        p                                `qed
+
+      | inv2 p =>
+        inv c *> (c *> p *> inv c) *> c  ==< pmap (inv c *>) (*>-assoc c (p *> inv c) c) >==
+        inv c *> c *> (p *> inv c) *> c  ==< pmap (inv c *> c *> __) (*>-assoc p (inv c) c) >==
+        inv c *> c *> p *> inv c *> c    ==< pmap (inv c *> c *> p *> __) (inv_*> c) >==
+        inv c *> c *> p                  ==< inv (*>-assoc (inv c) c p) >==
+        (inv c *> c) *> p                ==< pmap (`*> p) (inv_*> c) >==
+        idp *> p                         ==< idp_*> p >==
+        p                                `qed
+
+      | homo p1 p2 =>
+        (inv c *> p1 *> c) *> inv c *> p2 *> c  ==< *>-assoc (inv c) (p1 *> c) (inv c *> p2 *> c) >==
+        inv c *> (p1 *> c) *> inv c *> p2 *> c  ==< pmap (inv c *>) (*>-assoc p1 c (inv c *> p2 *> c)) >==
+        inv c *> p1 *> c *> inv c *> p2 *> c    ==< pmap (inv c *> p1 *> __) (inv (*>-assoc c (inv c) (p2 *> c))) >==
+        inv c *> p1 *> (c *> inv c) *> p2 *> c  ==< pmap (inv c *> p1 *> __ *> p2 *> c) (*>_inv c) >==
+        inv c *> p1 *> idp *> p2 *> c           ==< pmap (inv c *> p1 *> __) (idp_*> (p2 *> c)) >==
+        inv c *> p1 *> p2 *> c                  ==< pmap (inv c *>) (inv (*>-assoc p1 p2 c)) >==
+        inv c *> (p1 *> p2) *> c                `qed
+    })
+  }
+
+-- EXERCISE 4
+
+\func ex4 (G : Group) : isConnected (K1 G) =>
+  \lam x y => \case \elim x, \elim y \with {
+    | K1.base, K1.base => trunc idp
+  }

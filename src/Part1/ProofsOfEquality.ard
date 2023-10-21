@@ -1,5 +1,4 @@
 \import Paths (pmap, transport, transportInv)
-\import Data.Bool (Bool, if)
 \import Data.List (List, nil, ::)
 \open Nat (+)
 
@@ -15,6 +14,11 @@
 
 \data Empty
 \data Unit | unit
+\data Bool | true | false
+
+\func if {A : \Type} (b : Bool) (x y : A) : A \elim b
+  | true => x
+  | false => y
 
 \data Vec (A : \Type) (n : Nat) \elim n
   | zero => vnil

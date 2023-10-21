@@ -1,0 +1,170 @@
+\import Paths (*>, pmap, transport, transportInv)
+\import Data.List (List, nil, ::)
+\import Part1.CaseExpression (Empty)
+\import Part2.PropositionsAndSets (isProp)
+\open Nat (+, *)
+
+\func isInj {A B : \Set} (f : A -> B) => \Pi (x y : A) -> f x = f y -> x = y
+
+\truncated \data Trunc (A : \Type) : \Prop
+  | in A
+  \where {
+    \func map {A B : \Type} (f : A -> B) (x : Trunc A) : Trunc B \elim x
+      | in a => in (f a)
+
+    \lemma extract {A : \Type} (x : Trunc A) (p : isProp A) : \level A p \elim x
+      | in a => a
+  }
+
+\func isSur {A B : \Set} (f : A -> B) : \Prop =>
+  \Pi (b : B) -> Trunc (\Sigma (a : A) (f a = b))
+
+\truncated \data Quotient (A : \Type) (R : A -> A -> \Type) : \Set
+  | inR A
+  | eq (a a' : A) (r : R a a') (i : I) \elim i {
+    | left => inR a
+    | right => inR a'
+  }
+
+-- EXERCISE 1
+
+\func pred (x : Nat) : Nat
+  | 0 => 0
+  | suc x => x
+
+\func pred-isSur : isSur pred =>
+  \lam (x : Nat) => in (suc x, idp)
+
+-- EXERCISE 2
+
+\func suc-notSur (h : isSur suc) : Empty =>
+  \case h 0 \with { in (x, ()) }
+
+-- EXERCISE 3
+
+\func o-isSur {A B C : \Set}
+              (f : A -> B) (hf : isSur f)
+              (g : B -> C) (hg : isSur g)
+              : isSur (\lam a => g (f a)) =>
+  \lam c => \case hg c \with {
+    | in (b, gb=c) => \case hf b \with {
+      | in (a, fa=b) => in (a, pmap g fa=b *> gb=c)
+    }
+  }
+
+\func g-isSur {A B C : \Set}
+              (f : A -> B) (g : B -> C)
+              (h : isSur (\lam a => g (f a)))
+              : isSur g =>
+  \lam c => \case h c \with {
+    | in (a, gfa=c) => in (f a, gfa=c)
+  }
+
+-- EXERCISE 4
+
+\func apply {A B : \Type} (x : A) (f : A -> B) : B => f x
+
+\func contra {A : \Type} (p : A = (A -> Empty)) : Empty => \let
+  | f : A -> A -> Empty => transport (\lam X => X) p
+  | g : (A -> Empty) -> A => transportInv (\lam X => X) p
+  | a : A => g (\lam x => f x x)
+  \in f a a
+
+\func cantor1 (A : \Set) : \Sigma (f : A -> A -> \Prop) (isInj f) =>
+  (=, \lam x y p => transportInv (\lam X => X) (pmap (apply y) p) idp)
+
+\func cantor2 (A : \Set) (f : A -> A -> \Prop) (h : isSur f) : Empty => \let
+  | test (x : A) : \Prop => f x x -> Empty
+  \in \case h test \with {
+    | in (a, fa=test) => contra (pmap (apply a) fa=test)
+  }
+
+-- EXERCISE 5
+
+\func negPred (x : Int) : Int
+  | pos (suc x) => pos (suc x)
+  | pos 0 => neg (suc 0)
+  | neg x => neg (suc x)
+
+-- EXERCISE 6
+
+\func intAdd (x y : Int) : Int
+  | pos x, pos y => pos (x + y)
+  | neg (suc x), neg (suc y) => neg (suc (suc (x + y)))
+
+  | pos 0, neg (suc y) => neg (suc y)
+  | pos (suc x), neg (suc y) => intAdd (pos x) (neg y)
+
+  | neg (suc x), pos 0 => neg (suc x)
+  | neg (suc x), pos (suc y) => intAdd (neg x) (pos y)
+
+\func intMul (x y : Int) : Int
+  | pos x, pos y => pos (x * y)
+  | pos x, neg y => neg (x * y)
+  | neg (suc x), pos y => neg (suc x * y)
+  | neg (suc x), neg y => pos (suc x * y)
+
+-- EXERCISE 7
+
+\data BinNat
+  | bzero
+  | beven (n : BinNat) \elim n {
+      | bzero => bzero
+    }
+  | bodd BinNat
+
+-- EXERCISE 8
+
+\func bsuc (n : BinNat) : BinNat
+  | bzero => bodd bzero
+  | beven n => bodd n
+  | bodd n => beven (bsuc n)
+
+\func toNat (n : BinNat) : Nat
+  | bzero => 0
+  | beven n => 2 * toNat n
+  | bodd n => suc (2 * toNat n)
+
+\func fromNat (n : Nat) : BinNat
+  | 0 => bzero
+  | suc n => bsuc (fromNat n)
+
+\func toFrom (n : BinNat) : fromNat (toNat n) = n \elim n
+  | bzero => idp
+  | beven n => doubleLemma (toNat n) *> pmap beven (toFrom n)
+  | bodd n => pmap bsuc (doubleLemma (toNat n)) *> pmap bodd (toFrom n)
+  \where {
+    \func doubleLemma (n : Nat) : fromNat (2 * n) = beven (fromNat n) \elim n
+      | 0 => idp
+      | suc n => pmap bsuc (pmap bsuc (doubleLemma n))
+  }
+
+\func fromTo (n : Nat) : toNat (fromNat n) = n \elim n
+  | 0 => idp
+  | suc n => bsucLemma (fromNat n) *> pmap suc (fromTo n)
+  \where {
+    \func bsucLemma (n : BinNat) : toNat (bsuc n) = suc (toNat n) \elim n
+      | bzero => idp
+      | beven n => idp
+      | bodd n => pmap (2 *) (bsucLemma n)
+  }
+
+\func BinNat=Nat : BinNat = Nat => path (iso toNat fromNat toFrom fromTo)
+
+-- EXERCISE 9
+
+\data In {A : \Type} (a : A) (xs : List A) \elim xs
+  | x :: xs => {
+    | isHead (a = x)
+    | inTail (In a xs)
+  }
+
+\data All {A : \Type} (P : A -> \Type) (xs : List A) \elim xs
+  | nil => allNil
+  | x :: xs => allCons (P x) (All P xs)
+
+\data SameSet {A : \Type} (xs ys : List A) =>
+  \Sigma (All (\lam x => In x ys) xs) (All (\lam y => In y xs) ys)
+
+\data FinSet {A : \Set} : \Set =>
+  Quotient (List A) SameSet

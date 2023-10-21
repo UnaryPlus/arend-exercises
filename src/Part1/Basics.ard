@@ -95,8 +95,8 @@
       | (_ :: xs) :: rows => xs :: tails rows
 
     \func m3x0 {A : \Type} : List (List A) => nil :: nil :: nil :: nil
-    \func m2x3 => (1 :: 2 :: 3 :: nil) :: (4 :: 5 :: 6 :: nil) :: nil
-    \func m3x2 => (1 :: 4 :: nil) :: (2 :: 5 :: nil) :: (3 :: 6 :: nil) :: nil
+    \func m2x3 : List (List Nat) => (1 :: 2 :: 3 :: nil) :: (4 :: 5 :: 6 :: nil) :: nil
+    \func m3x2 : List (List Nat) => (1 :: 4 :: nil) :: (2 :: 5 :: nil) :: (3 :: 6 :: nil) :: nil
 
     \func test1 {A : \Type} : transpose {A} m3x0 = nil => idp
     \func test2 : transpose m2x3 = m3x2 => idp

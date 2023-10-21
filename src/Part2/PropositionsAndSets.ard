@@ -1,0 +1,352 @@
+\import Part1.CaseExpression (Empty, absurd, Unit, unit, yes, no, Eq, decideEq)
+\import Paths (*>, Jl, inv, setPath)
+\import Data.List (List, nil, ::, headDef, tail)
+
+\func pmap {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a' \elim p
+  | idp => idp
+
+\func pmap2 {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' \elim p, q
+  | idp, idp => idp
+
+\func transport {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' \elim p
+  | idp => b
+
+\func Not (A : \Type) => A -> Empty
+
+\data Bool | false | true
+
+\func T (x : Bool) : \Type
+  | false => Empty
+  | true => Unit
+
+\func or (x : Bool) (y : Bool) : Bool \elim x
+  | true => true
+  | false => y
+
+\func isInj {A B : \Type} (f : A -> B) =>
+  \Pi (x y : A) -> f x = f y -> x = y
+
+\func isProp (A : \Type) => \Pi (x y : A) -> x = y
+\func isSet (A : \Type) => \Pi (x y : A) -> isProp (x = y)
+
+\func hasLevel (A : \Type) (suc-l : Nat) : \Type \elim suc-l
+  | 0 => isProp A
+  | suc suc-l => \Pi (x y : A) -> (x = y) `hasLevel` suc-l
+
+\data Either (A B : \Type)
+  | inl A
+  | inr B
+
+\data Maybe (A : \Type)
+  | nothing
+  | just A
+
+\data \infix 4 <= (n m : Nat) \with
+  | 0, _ => zero<=_
+  | suc n, suc m => suc<=suc (n <= m)
+
+\data \infix 4 <='' (n m : Nat) : \Set0 \elim m
+  | suc m => <=-step (<='' n m)
+  | m => <=-refl (n = m)
+
+\func \infix 4 < (n m : Nat) : Bool
+  | _, 0 => false
+  | 0, suc _ => true
+  | suc n, suc m => n < m
+
+\data ReflClosure (R : Nat -> Nat -> \Type) (x y : Nat)
+  | refl (x = y)
+  | inc (R x y)
+
+\func retract-prop {A B : \Type} (pB : isProp B) (f : A -> B) (g : B -> A)
+                     (h : \Pi (x : A) -> g (f x) = x)
+  : isProp A
+  => \lam x y => inv (h x) *> pmap g (pB (f x) (f y)) *> h y
+
+-- EXERCISE 1
+
+\func comp-inj
+  {A B C : \Type}
+  (f : A -> B) (f-inj : isInj f)
+  (g : B -> C) (g-inj : isInj g)
+  : isInj (\lam x => g (f x))
+  => \lam x y p => f-inj x y (g-inj (f x) (f y) p)
+
+-- EXERCISE 2
+
+\func multipleOf3 (x : Nat) : Bool
+  | 0 => true
+  | 1 => false
+  | 2 => false
+  | suc (suc (suc x)) => multipleOf3 x
+
+\func multipleOf5 (x : Nat) : Bool
+  | 0 => true
+  | 1 => false
+  | 2 => false
+  | 3 => false
+  | 4 => false
+  | suc (suc (suc (suc (suc x)))) => multipleOf5 x
+
+\func multipleOf3Or5 (x : Nat) : Bool
+  => multipleOf3 x `or` multipleOf5 x
+
+\func MultipleOf3Or5 => \Sigma (x : Nat) (T (multipleOf3Or5 x))
+
+\func embed (x : MultipleOf3Or5) : Nat
+  => x.1
+
+\func embed-inj : isInj embed =>
+  \lam x y p => helper x.1 x.2 y.1 y.2 p
+  \where {
+    \func helper
+      (x : Nat) (mx : T (multipleOf3Or5 x)) (y : Nat) (my : T (multipleOf3Or5 y))
+      (p : x = y) : (x, mx) = {MultipleOf3Or5} (y, my) \elim p
+      | idp => \case multipleOf3Or5 x \as b1, \elim mx : T b1, multipleOf3Or5 y \as b2, \elim my : T b2 \with {
+        | true, unit, true, unit => idp
+      }
+  }
+
+-- EXERCISE 3
+
+\func Trivial (A : \Type)
+  => \Sigma (a : A) (\Pi (x : A) -> a = x)
+
+\func trivial=>iprop {A : \Type} (t : Trivial A) : \Sigma A (isProp A)
+  => (t.1, \lam x y => inv (t.2 x) *> t.2 y)
+
+\func iprop=>trivial {A : \Type} (a : A) (p : isProp A) : Trivial A
+  => (a, \lam x => p a x)
+
+-- EXERCISE 4
+
+\func unit-prop : isProp Unit
+  => \lam x y => \case \elim x, \elim y \with {
+    | unit, unit => idp
+  }
+
+\func two-notProp (p : isProp (Either Unit Unit)) : Empty
+  => \case p (inl unit) (inr unit) \with {}
+
+\func either-notProp (p : \Pi {A : \Type} (isProp A) {B : \Type} (isProp B) -> isProp (Either A B)) : Empty
+  => two-notProp (p unit-prop unit-prop)
+
+-- EXERCISE 5
+
+\func sigmaEq
+  {A : \Type} (B : A -> \Type)
+  {a a' : A} (pA : a = a')
+  {b : B a} {b' : B a'} (pB : transport B pA b = b')
+  : (a, b) = {\Sigma (x : A) (B x)} (a', b') \elim pA
+  | idp => path (\lam i => (a, pB @ i))
+
+\func sigma-prop
+  {A : \Type} (pA : isProp A)
+  (B : A -> \Type) (pB : \Pi (x : A) -> isProp (B x))
+  : isProp (\Sigma (x : A) (B x))
+  => \lam x y => sigmaEq B (pA x.1 y.1) (pB y.1 (transport B (pA x.1 y.1) x.2) y.2)
+
+-- EXERCISE 6
+
+\func <=-pred (x y : Nat) (p1 p2 : x <= y) : p1 = p2
+  | 0, _, zero<=_, zero<=_ => idp
+  | suc x, 0, (), _
+  | suc x, suc y, suc<=suc p1, suc<=suc p2 => pmap suc<=suc (<=-pred x y p1 p2)
+
+\func <=''-pred (x y : Nat) (p1 p2 : x <='' y) : p1 = p2 \elim y, p1, p2
+  | 0, <=-refl p1, <=-refl p2 => pmap <=-refl setPath
+  | suc y, <=-refl p1, <=-refl p2 => pmap <=-refl setPath
+  | suc y, <=-step p1, <=-step p2 => pmap <=-step (<=''-pred x y p1 p2)
+  | suc y, <=-refl p1, <=-step p2 => absurd (lemma3 (transport (\lam z => z <='' y) p1 p2))
+  | suc y, <=-step p1, <=-refl p2 => absurd (lemma3 (transport (\lam z => z <='' y) p2 p1))
+
+  \where {
+    \func pred (x : Nat) : Nat
+      | 0 => 0
+      | suc x => x
+
+    \func lemma1 {x : Nat} (p : suc x = x) : Empty \elim x, p
+      | 0, ()
+      | suc x, p => lemma1 (pmap pred p)
+
+    \func lemma2 {x y : Nat} (p : suc x <='' y) : x <='' y \elim y, p
+      | 0, <=-refl ()
+      | suc y, <=-refl p => transport (\lam z => x <='' z) p (<=-step (<=-refl idp))
+      | suc y, <=-step p => <=-step (lemma2 p)
+
+    \func lemma3 {x : Nat} (p : suc x <='' x) : Empty \elim x, p
+      | 0, <=-refl ()
+      | suc x, <=-refl p => lemma1 p
+      | suc x, <=-step p => lemma3 (lemma2 p)
+  }
+
+-- EXERCISE 7
+
+\func rc<=-notPred (p : \Pi (x y : Nat) -> isProp (ReflClosure (<=) x y)) : Empty
+  => \case p 0 0 (refl idp) (inc zero<=_) \with {}
+
+\func rc<-pred (x y : Nat) (p1 p2 : ReflClosure (\lam x y => T (x < y)) x y) : p1 = p2 \elim p1, p2
+  | refl p1, inc p2 => absurd (<-antiRefl (transport (\lam z => T(z < y)) p1 p2))
+  | inc p1, refl p2 => absurd (<-antiRefl (transport (\lam z => T(z < y)) p2 p1))
+  | refl p1, refl p2 => pmap refl setPath
+
+  | inc p1, inc p2 =>
+    \case x < y \as b, \elim p1 : T b, \elim p2 : T b \with {
+      | true, unit, unit => idp
+    }
+  \where {
+    \func <-antiRefl {x : Nat} (p : T (x < x)) : Empty \elim x, p
+      | 0, ()
+      | suc x, p => <-antiRefl p
+  }
+
+-- EXERCISE 8
+
+\func ex8 {A B : \Type} (b-prop : isProp B) (f : A -> B) (f-inj : isInj f) : isProp A
+  => \lam x y => f-inj x y (b-prop (f x) (f y))
+
+-- EXERCISE 9
+
+\func inv-*> {A : \Type} {x y : A} {p : x = y} : inv p *> p = idp \elim p
+  | idp => idp
+
+-- took some hints from the HoTT book for this one
+\func setLemma1
+  {A : \Type} (P : A -> A -> \Type)
+  (P-refl : \Pi (x y : A) -> x = y -> P x y)
+  (f : \Pi (x y : A) -> P x y -> x = y)
+  {x y : A} (p : x = y) : inv (f x x (P-refl x x idp)) *> f x y (P-refl x y p) = p \elim p
+  | idp => inv-*>
+
+\func setLemma2
+  {A : \Type} (P : A -> A -> \Type)
+  (P-prop : \Pi (x y : A) -> isProp (P x y))
+  (P-refl : \Pi (x y : A) -> x = y -> P x y)
+  (f : \Pi (x y : A) -> P x y -> x = y)
+  {x y : A} (p1 p2 : x = y) : p1 = p2
+  => \let
+    | part1 => setLemma1 P P-refl f p1
+    | part2 => setLemma1 P P-refl f p2
+    | connection => pmap (\lam p => _ *> f x y p) (P-prop x y (P-refl x y p1) (P-refl x y p2))
+    \in inv part1 *> connection *> part2
+
+\func nn-prop {A : \Type} (x y : A) (p1 p2 : Not (Not (x = y))) : p1 = p2
+  => path (\lam i x => p1 x)
+
+\func nnIntro {A : \Type} (x y : A) (p : x = y) : Not (Not (x = y))
+  => \lam np => np p
+
+\func nnElim {A : Eq} (x y : A) (nnp : Not (Not (x = y))) : x = y
+  => \case decideEq x y \with {
+    | yes p => p
+    | no np => absurd (nnp np)
+  }
+
+\func ex9 {A : Eq} : isSet A
+  => \lam x y p1 p2
+  => setLemma2
+    (\lam x y => Not (Not (x = y)))
+    nn-prop nnIntro nnElim
+    p1 p2
+
+-- EXERCISE 10
+
+\func inl-inj {A B : \Type} {x y : A} (p : inl x = {Either A B} inl y) : x = y
+  => pmap (toA x) p
+  \where {
+    \func toA {A B : \Type} (dft : A) (e : Either A B) : A \elim e
+      | inl x => x
+      | inr _ => dft
+  }
+
+\func inlLemma {A B : \Type} {x y : A} (p : inl x = {Either A B} inl y) : pmap inl (inl-inj p) = p
+  => Jl P idp p
+  \where {
+    \func P {A B : \Type} {x : A} (e : Either A B) (p : inl x = e) : \Type \elim e, p
+      | inl y, p => pmap inl (inl-inj p) = p
+  }
+
+\func inr-inj {A B : \Type} {x y : B} (p : inr x = {Either A B} inr y) : x = y
+  => pmap (toB x) p
+  \where {
+    \func toB {A B : \Type} (dft : B) (e : Either A B) : B \elim e
+      | inl _ => dft
+      | inr x => x
+  }
+
+\func inrLemma {A B : \Type} {x y : B} (p : inr x = {Either A B} inr y) : pmap inr (inr-inj p) = p
+  => Jl P idp p
+  \where {
+    \func P {A B : \Type} {x : B} (e : Either A B) (p : inr x = e) : \Type \elim e, p
+      | inr y, p => pmap inr (inr-inj p) = p
+  }
+
+\func either-set {A B : \Type} (sA : isSet A) (sB : isSet B) : isSet (Either A B)
+  => \lam x y p1 p2 => \case \elim x, \elim y, \elim p1, \elim p2 \with {
+    | inl x, inl y, p1, p2 => \let
+      | low : inl-inj p1 = inl-inj p2 => sA x y _ _
+      \in inv (inlLemma p1) *> pmap (pmap inl) low *> inlLemma p2
+    | inr x, inr y, p1, p2 => \let
+      | low : inr-inj p1 = inr-inj p2 => sB x y _ _
+      \in inv (inrLemma p1) *> pmap (pmap inr) low *> inrLemma p2
+  }
+
+-- EXERCISE 11
+
+\func funExt {A : \Type} {B : A -> \Type} {f g : \Pi (x : A) -> B x} (p : \Pi (x : A) -> f x = g x) : f = g
+  => path (\lam i => \lam x => p x @ i)
+
+-- funExt (unFunExt p) => p
+\func unFunExt {A : \Type} {B : A -> \Type} {f g : \Pi (x : A) -> B x} (p : f = g) (x : A) : f x = g x
+  => path (\lam i => (p @ i) x)
+
+\func pi-set {A : \Type} (B : A -> \Type) (sB : \Pi (x : A) -> isSet (B x)) : isSet (\Pi (x : A) -> B x)
+  => \lam f g p1 p2 => \let
+    | p1' : \Pi (x : A) -> f x = g x => unFunExt p1
+    | p2' : \Pi (x : A) -> f x = g x => unFunExt p2
+    | low : p1' = p2' => funExt (\lam x => sB x (f x) (g x) (p1' x) (p2' x))
+    \in pmap funExt low
+
+-- EXERCISE 12
+
+\func nilPath {A : \Type} (p : nil {A} = nil {A}) : p = idp
+  => Jl {List A} {nil} P idp p
+  \where {
+    \func P {A : \Type} (x : List A) (p : nil = x) : \Type \elim x, p
+      | nil, p => p = idp
+  }
+
+\func listExt {A : \Type} {x y : A} {xs ys : List A} (p : \Sigma (x = y) (xs = ys)) : x :: xs = y :: ys
+  => pmap2 (::) p.1 p.2
+
+\func unListExt {A : \Type} {x y : A} {xs ys : List A} (p : x :: xs = y :: ys) : \Sigma (x = y) (xs = ys)
+  => (pmap (headDef x) p, pmap tail p)
+
+\func listExt-retraction {A : \Type} {x y : A} {xs ys : List A} (p : x :: xs = y :: ys) : listExt (unListExt p) = p
+  => Jl P idp p
+  \where {
+    \func P {A : \Type} {x : A} {xs : List A} (ys : List A) (p : x :: xs = ys) : \Type \elim ys, p
+      | y :: ys, p => listExt (unListExt p) = p
+  }
+
+\func list-set {A : \Type} (sA : isSet A) (xs ys : List A) (p1 p2 : xs = ys) : p1 = p2 \elim xs, ys, p1, p2
+  | nil, nil, p1, p2 => nilPath p1 *> inv (nilPath p2)
+  | x :: xs, y :: ys, p1, p2 => \let
+    | p1' : \Sigma (x = y) (xs = ys) => unListExt p1
+    | p2' : \Sigma (x = y) (xs = ys) => unListExt p2
+    | low : p1' = p2' => pmap2 pair (sA x y _ _) (list-set sA xs ys _ _)
+    \in inv (listExt-retraction p1) *> pmap listExt low *> listExt-retraction p2
+  \where {
+    \func pair {A B : \Type} (x : A) (y : B) : \Sigma A B => (x, y)
+  }
+
+-- EXERCISE 13
+
+\func piPathIso {A : \Type} {B : A -> \Type} {f g : \Pi (x : A) -> B x} : (\Pi (x : A) -> f x = g x) = (f = g)
+  => path (iso funExt unFunExt (\lam p => idp) (\lam p => idp))
+
+\func pi-level {A : \Type} (B : A -> \Type) {n : Nat} (h : \Pi (x : A) -> B x `hasLevel` n) : (\Pi (x : A) -> B x) `hasLevel` n \elim n
+  | 0 => \lam f g => funExt (\lam x => h x (f x) (g x))
+  | suc n => \lam f g => \let
+    | almost => pi-level (\lam x => f x = g x) {n} (\lam x => h x (f x) (g x))
+    \in transport (\lam t => t `hasLevel` n) piPathIso almost -- univalence!
