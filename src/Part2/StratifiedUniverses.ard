@@ -1,7 +1,6 @@
-\import Paths (*>, Jl, pmap, propPath, transport, inv, transportInv)
+\import Paths (*>, pmap, propPath, transport, inv)
 \import Part1.CaseExpression (Empty, absurd)
 \import Part2.PropositionsAndSets (isSet, funExt, unFunExt)
-\open Nat (+)
 
 \data Bool | true | false
 
